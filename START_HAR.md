@@ -1,19 +1,30 @@
-# Börja här – OpenCode Agentteam 2.0
+# Börja här – OpenCode Agentteam
 
-Installera genom att packa upp ZIP-filen och köra `bash install.sh` i den uppackade katalogen. Det ersätter den gamla centrala versionen av `agents-opencode` utan att ta bort befintliga projekt.
+## Windows (native)
 
-Starta i ett Git-projekt: `cd ~/git/ditt-projekt && agents-opencode`.
+Krav: Windows, Python 3.10 eller senare, Git och OpenCode installerat/konfigurerat separat. Installationsprogrammet kräver inte Bash, administratörsrättigheter eller Python-paket. OpenCode har egna plattformskrav och kan på Windows behöva Git Bash; kontrollera OpenCodes dokumentation. Det kravet gäller inte `install.cmd`.
 
-Välj **1** för hela guiden: urval av agenter, hela listan från `opencode models` för varje vald agent, informationsklassning och egna behörighetsval.
+1. Hämta hela källarkivet från GitHub med **Code → Download ZIP**. Det finns ingen separat release-binär. Packa upp hela arkivet.
+2. I CMD: gå till den uppackade katalogen och kör `install.cmd`. Ange språk direkt med `install.cmd --lang sv` eller `install.cmd --lang en`. I PowerShell: gå till katalogen med `Set-Location` och kör `.\install.cmd` eller `.\install.cmd --lang sv` / `.\install.cmd --lang en`. Språk väljs först; Enter väljer engelska.
+3. I CMD, starta `agents-opencode.cmd` från den uppackade katalogen eller kör den installerade filen:
 
-Senare kan du välja **2** för att byta alla agentmodeller, **3** för att lägga till eller ta bort agenter, **4** för att ändra rättigheter, **6** för att skapa en ny agent, **7** för att starta OpenCode och **8** för att återuppta en session.
+   ```text
+   "%LOCALAPPDATA%\agents-opencode\bin\agents-opencode.cmd"
+   ```
 
-Läs `README.md` om särskilt säkerhetsfrågorna: OpenCodes behörigheter ger inte pålitligt nätverks-/filsystemskydd för shellkommandon. Använd en isolerad VM när agentteamet ska ha mycket stor frihet.
+   I PowerShell, kör `& "$env:LOCALAPPDATA\agents-opencode\bin\agents-opencode.cmd"`. Kommandokatalogen läggs inte automatiskt till i PATH. Kör filen med full sökväg eller lägg rätt katalog (`%LOCALAPPDATA%\agents-opencode\bin` i CMD eller `$env:LOCALAPPDATA\agents-opencode\bin` i PowerShell) till i användarens PATH manuellt och öppna ett nytt terminalfönster.
+4. Gå till ett Git-projekt och starta managern. Välj **1** för hela konfigurationsguiden. CMD-exempel: `agents-opencode.cmd install --lang sv`. PowerShell-exempel: `.\agents-opencode.cmd install --lang sv`. Interaktiv körning frågar om språk först; Enter väljer engelska. I icke-interaktiv körning är standardspråket engelska.
 
-## Nytt i v2.1: vit- och svartlistor
+## Linux
 
-Kör `agents-opencode access` inne i projektet. Där kan du välja tillåtna och blockerade **lokala kataloger, nätverksdiskar och internetvärdar**. Normalt är all åtkomst utanför projektmappen blockerad om du inte uttryckligen väljer breda VM-rättigheter. Reglerna sparas i `AGENT_ACCESS_POLICY.json`, och engelska instruktioner laddas av OpenCode.
+Packa upp hela arkivet och kör `bash install.sh`. Starta därefter `agents-opencode` från ett projekt. Bash behövs för Linux-installationen; ingen root-behörighet eller Python-paket krävs.
 
-Vill du ändra filen manuellt, kör sedan `agents-opencode sync-access` och starta om OpenCode. Ett enkelt kontrollkommando är `python3 .opencode/tools/access_check.py path read /mnt/disk/fil.txt`.
+## Guiden och delning
 
-**VARNING: Det är inte riktig säkerhet.** Ett tillåtet shellkommando kan komma åt andra sökvägar eller kontakta andra adresser oavsett vad reglerna säger. Säker begränsning kräver OS-/VM-/containeråtkomstkontroll och nätverksfilter. OpenCode 1.x kan inte nativt begränsa `webfetch` per domän.
+Guiden låter dig välja agenter, modeller från den separat installerade OpenCode-kommandot `opencode models`, informationsklassning och behörigheter. Modeller eller API-nycklar förväljs inte. Agentprofiler och genererade projektinstruktioner är på engelska även när managergränssnittet är svenskt.
+
+Dela hela det kuraterade källarkivet, till exempel GitHubs **Code → Download ZIP**. Dela inte en lokal managerinstallation eller en konfigurerad projektrepository som om de vore installationspaketet. Projektets `opencode.json`, `AGENTS.md`, `PROJECT_POLICY.md`, `AGENT_ACCESS_POLICY.json` och `.opencode/` är lokal, genererad konfiguration. `AGENT_CAST.md` är en fiktiv och frivillig presentation av rollerna; den beskriver inte riktiga personer och ändrar inte agenternas roller eller mandat.
+
+**Säkerhet:** OpenCodes behörigheter och åtkomstpolicy är inte en sandbox eller brandvägg. Tillåtna shellkommandon och program kan använda värdkontots åtkomst. För verklig begränsning krävs OS-/VM-/containerkontroller och nätverksfilter. Läs säkerhetsavsnitten i `README.md` innan du väljer breda rättigheter eller obevakad körning.
+
+Windows-installationen är implementerad, men har inte verifierats genom native Windows-test här. Linux-kontroller har körts; vissa Windows-specifika tester hoppas över på Linux.

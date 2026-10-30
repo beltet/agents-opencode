@@ -1,189 +1,153 @@
-# OpenCode Agentteam — Portable installer v2.1.0
+# OpenCode Agentteam — portable installer v2.1.0
 
-**A portable engineering-agent team installer for OpenCode 1.x (designed for v1.19.5)**. The 23 included specialist profiles and working instructions are in English. The management wizard is in Swedish. Each colleague chooses their own models and project permissions; **no model IDs, API keys, providers or user-specific paths are preconfigured**.
+A portable installer and manager for an engineering-agent team for **OpenCode 1.x** (designed for v1.19.5). It includes 23 specialist profiles and shared team instructions in English. The manager offers Swedish and English UI. No model IDs, API keys, providers, or user-specific paths are preconfigured; each user selects models and permissions.
 
-## Requirements
+## Quick start
 
-- Linux (Fedora, CachyOS and most distributions); a Bash shell, Python 3 standard library and Git.
-- The `opencode` executable and suitable model providers must be configured separately (`opencode models` should work).
-- `unzip` to extract the archive. No root privileges or Python packages are needed for this installer.
-- The package uses **OpenCode 1.x** `opencode.json` configuration syntax (`permission`, `bash`, `task`, `agent`). OpenCode v2 uses a different format; do not use these generated permissions with v2.
+### Windows (native)
 
-## Install or replace the old management tool
+Requirements: Windows, Python 3.10 or later, Git, and OpenCode installed and configured separately. The installer itself is native Python and does not require Bash, administrator rights, Python packages, or a network connection. OpenCode has its own platform requirements; on Windows it may require Git Bash. Check OpenCode's own requirements—this installer does not install or validate Git Bash.
+
+1. Download the **complete source archive** from GitHub using **Code → Download ZIP**. There is no separate release binary. Extract the complete archive; do not copy only the launcher or installer.
+2. In Command Prompt, open the extracted folder and run:
+
+   ```text
+   install.cmd
+   ```
+
+   In PowerShell, use `Set-Location` to enter the extracted folder, then run `.\install.cmd` or `.\install.cmd --lang en` / `.\install.cmd --lang sv`.
+   The installer asks for language first (Swedish or English; Enter selects English).
+3. In Command Prompt, start `agents-opencode.cmd` from the extracted folder, or use the installed launcher:
+
+   ```text
+   "%LOCALAPPDATA%\agents-opencode\bin\agents-opencode.cmd"
+   ```
+
+   In PowerShell, use `& "$env:LOCALAPPDATA\agents-opencode\bin\agents-opencode.cmd"`.
+   The installed command directory is **not added to PATH automatically**. Either run the launcher by its full path, or add the appropriate `%LOCALAPPDATA%` / `$env:LOCALAPPDATA` directory to your user PATH manually and open a new terminal. No administrator rights are required.
+4. In a project folder, start the installed launcher by its full path as shown above, or use `agents-opencode.cmd` if its `bin` directory is on PATH. Choose **1** to configure the project. Append `--lang en` or `--lang sv` to select a language directly. Without the flag, the manager asks for language first on interactive startup; Enter defaults to English. In noninteractive use, the default is English.
+
+OpenCode and its model providers must be installed/configured separately; the manager uses `opencode models` when you configure a project. The manager's installer does not download software or contact a network. If OpenCode's Windows runtime needs Git Bash, that is an OpenCode runtime requirement, not a requirement to run `install.cmd`.
+
+### Linux
+
+Requirements: Bash, Python 3.10 or later (standard library only), Git, and OpenCode installed/configured separately. Extract the complete archive, then run:
 
 ```bash
-cd ~/Downloads
-unzip OpenCode-Agentteam-Portable-v2.1.0.zip
-cd OpenCode-Agentteam-Portable-v2.1.0
 bash install.sh
 ```
 
-- User command: `~/.local/bin/agents-opencode`.
-- Central templates and Python logic: `${XDG_DATA_HOME:-~/.local/share}/agents-opencode/lib/`.
-- Existing central installation of this same tool is replaced; custom agent profiles are migrated from its `custom-profiles/` directory, and the old central version is deleted after success.
-- Existing **project repositories and user configurations are not deleted** by the system installer. When configuring an existing project, modified files are backed up beside themselves before replacement. The program never removes your global OpenCode credentials.
-- If `agents-opencode` is not in PATH: for Fish use `fish_add_path -U ~/.local/bin`; for Bash add `$HOME/.local/bin` to PATH.
+The user launcher is `~/.local/bin/agents-opencode`; central files are in `${XDG_DATA_HOME:-~/.local/share}/agents-opencode/`. The command directory may need to be added to PATH manually. No root privileges or Python packages are required.
 
-## New projects
+## Sharing the installer
 
-```bash
-mkdir -p ~/git/new-project && cd ~/git/new-project
-agents-opencode
-# Select 1 – Install / configure
-```
+Share the **complete curated source archive** (for example, the GitHub repository's **Code → Download ZIP** archive). It must contain the platform entry points, `lib/`, profiles, and documentation. Do not share a locally installed manager directory or generated project configuration as though it were the installer. User-specific files such as `opencode.json`, `AGENTS.md`, `PROJECT_POLICY.md`, `AGENT_ACCESS_POLICY.json`, and `.opencode/` are generated/configured locally and are not part of the curated distribution. There is no separate release ZIP/binary unless one is explicitly published in the future.
 
-The complete setup wizard will:
+The optional `AGENT_CAST.md` is a fictional, lightly comic presentation of the 23 roles—not real people, identities, or relationships. It does not alter role instructions, authority, or behavior; humor is optional.
 
-1. Ask which agents to install. Choose **all**, the suggested **core three**, or a comma/range list of agent numbers. The list is expandable with user-created roles.
-2. Call the **installed OpenCode** program using `opencode models` **once** and show the **complete available model list separately for every selected agent**, without filtering or truncating it. Enter its number for each role. `p` reuses the previous assignment, `i` intentionally inherits the caller’s model; Enter preserves an existing assignment. There are no preset model selections. For `image-analyst`, pick a model that actually supports images.
-3. Ask whether the project is PRIVATE, SHAREABLE or HYBRID. PRIVATE mode requires you to verify the selected endpoints really are local. The tool cannot determine whether an alias or proxy forwards data to the cloud.
-4. Run the permission wizard. Choose a starting preset (locked computer, development machine, isolated VM), then override **every individual permission** with allow / ask / deny. Optionally enter mounted share directories with separate read/write choices. You can also open the new path/network allowlist wizard to configure exceptions.
-5. Show a review of the exact agents, models, and main permissions and request confirmation **before writing any files**.
+## Project setup
 
-New projects may be initialized as Git repositories with an explicit prompt. You can install a smaller subset of roles, e.g. orchestrator, architect, programmer and documenter, rather than all 23.
+From a Git project directory, run `agents-opencode` on Linux or `agents-opencode.cmd` on Windows, then choose **1 – Install / configure**. In Windows CMD, change directory with `cd /d C:\path\to\project`; in PowerShell, use `Set-Location C:\path\to\project`. You may also pass a project path to the command.
 
-## Menu and shortcuts
+The wizard:
 
-| Menu action | Command |
+1. Lets you choose all agents, the suggested core three, or a list/range of agent numbers. User-created roles can extend the list.
+2. Runs the separately installed OpenCode command `opencode models` and shows its available model list for each selected agent. Choose a listed model, reuse the previous selection, inherit the caller's model, or keep an existing assignment where applicable. No model is preset. For `image-analyst`, select a model that supports image input.
+3. Asks whether the project is PRIVATE, SHAREABLE, or HYBRID. PRIVATE requires you to verify that chosen endpoints are local; the tool cannot detect whether an alias or proxy forwards data to the cloud.
+4. Offers permission presets and asks you to review individual permissions. You can separately configure mounted shares and path/network rules.
+5. Shows a summary and asks for confirmation before writing project files.
+
+The installer may offer to initialize a project as a Git repository. Existing project files that it changes are backed up. This does not mean every global or parent OpenCode configuration has been inspected; review your setup and backups.
+
+## Manager commands
+
+Commands accept an optional project path. On Windows, use the `.cmd` launcher; the launcher can be invoked from the extracted folder or the installed location above. Language flags may be given anywhere on the command line, for example `agents-opencode.cmd status C:\work\project --lang sv`.
+
+| Action | Command |
 | --- | --- |
-| Install / migrate / configure a project | `agents-opencode install` |
-| Reassign all selected models, full model list for each | `agents-opencode models-all` |
-| Add/remove installed roles in a project | `agents-opencode agents` |
-| Edit the permission wizard | `agents-opencode permissions` |
-| Edit path and network allowlists/denylists | `agents-opencode access` |
-| Apply manual edits to access policy | `agents-opencode sync-access` |
-| Show chosen agents/models/permissions | `agents-opencode status` |
+| Install, migrate, or configure a project | `agents-opencode install` |
+| Reassign selected models | `agents-opencode models-all` |
+| Add/remove installed roles | `agents-opencode agents` |
+| Edit permission choices | `agents-opencode permissions` |
+| Edit path and network rules | `agents-opencode access` |
+| Synchronize manually edited access policy | `agents-opencode sync-access` |
+| Show project status | `agents-opencode status` |
 | Create a reusable custom English agent | `agents-opencode add-agent` |
-| Start OpenCode with this project's mode | `agents-opencode run` |
-| Continue latest OpenCode session | `agents-opencode resume` |
-| Show unfiltered available models | `agents-opencode list-models` |
+| Start OpenCode / continue latest session | `agents-opencode run` / `agents-opencode resume` |
+| List available models | `agents-opencode list-models` |
 
-All commands accept an optional `PROJECT_PATH` argument, e.g. `agents-opencode status ~/git/minroj`; in the menu you can enter a different path. Without an argument, shortcuts use the current directory.
+The management UI language is selected per run; it is not a translation of generated agent profiles or project instructions, which remain English.
 
-## Permission wizard
+## Permissions and security
 
-You may select **allow** (no prompt), **ask** (interactive approval) or **deny** (block) for:
+The project wizard configures OpenCode 1.x permissions (`permission`, `bash`, `task`, `agent`). **Do not use this generated format with OpenCode v2**, which uses a different configuration format.
 
-- Shell commands and file edits in OpenCode.
-- Ordinary Git push commands (separately from other shell commands).
-- Web search/fetch and typical network-related shell commands.
-- Read versus write **outside the project worktree** with OpenCode file tools.
-- Named mounted network share directories with read/write permissions independently.
-- `sudo`, risky/destructive commands, credential/key access.
-- MCP/external tools and services, package installation, hardware flashing/RF-capable tools.
-- Unattended launch (`opencode --auto`). **In unattended mode, OpenCode auto-approves `ask`**; mark anything truly forbidden as `deny`.
+You may set shell commands, file edits, Git push, internet-related tools, access outside the project, secrets, MCP/external services, package installation, hardware tools, and unattended launch to allow, ask, or deny. These settings are best-effort OpenCode tool permissions and agent behavior instructions—not a firewall, filesystem sandbox, or OS security boundary. Allowed shell commands and programs can access resources available to the host account and may bypass tool-level patterns. `--auto` approves `ask`; use `deny` for actions that must remain blocked. Real isolation requires OS-level controls such as a VM/container, restricted mounts, and network filtering.
 
-**Security warning:** OpenCode permissions are *not* a firewall or filesystem sandbox. When Bash or allowed project code executes, it has the authority of the hosting OS account. Even when a command pattern for `curl`, Git or `rm` is denied, a Python program, Git hook, shell alias or build script can perform equivalent operations. **Per-address internet allowlists, forced access only to an exact Git remote, true split read/write access to mounted shares and no access outside the repo require OS controls** (isolated VM/container, permissions, restricted mounts, firewall/proxy). The wizard configures best-effort OpenCode tool permissions, not hardened isolation.
+The per-project `AGENT_ACCESS_POLICY.json` is an editable policy description. Its helper checks are advisory; configured model-provider traffic is separate from agent-initiated network requests. Read the detailed cautions below before using broad permissions or unattended mode.
 
-For an unattended VM, use an isolated nonprivileged system account, only mount designated files/shares, remove unnecessary credentials, apply network restrictions at the OS/virtual network layer, and budget provider usage separately. Avoid `--auto` on a sensitive workstation without isolation.
+## Per-project access policy
 
-
-## v2.1: one editable access-policy file per project
-
-**This is an AGENT BEHAVIOR POLICY and a best-effort mapping to OpenCode 1.x tools, not an operating-system access-control mechanism.** The agent receives the project-specific English rules through `opencode.json` `instructions`. Existing `AGENTS.md` is also extended with a managed reference. Other files can override or conflict with these instructions; review global and parent configurations separately.
-
-At first install, the wizard writes `AGENT_ACCESS_POLICY.json` inside the repository. It is the authoritative editable document for path and hostname decisions. **Default outside access is deny** for locked/development presets, including root `/`; project worktree access follows your project edit permissions. Deliberately choosing a broad VM preset can override the outside defaults. An explicit `"path": "/"` allow rule is rejected; broad access must be chosen knowingly.
-
-Here is a **sample** (use paths that really exist on your system; the wizard generates the project root and rest of the fields):
+At first install, the wizard writes `AGENT_ACCESS_POLICY.json`. The project root is allowed for project work; outside paths default according to the selected permission profile. More specific path rules can allow or deny local folders and mounted shares. Network rules use hostnames, schemes, and optional ports. This policy and its generated instructions are **not a security sandbox**.
 
 ```json
 {
   "version": 1,
   "advisory_only": true,
-  "project_root": "/home/user/git/example",
+  "project_root": "C:\\work\\example",
   "filesystem": {
     "default_outside": {"read": "deny", "write": "deny"},
     "paths": [
-      {"path": "/mnt/team-documents", "kind": "network-share", "read": "allow", "write": "deny"},
-      {"path": "/home/user/reference", "kind": "local", "read": "allow", "write": "deny"},
-      {"path": "/mnt/team-documents/confidential", "kind": "network-share", "read": "deny", "write": "deny"}
+      {"path": "D:\\team-documents", "kind": "network-share", "read": "allow", "write": "deny"}
     ]
   },
   "network": {
     "default": "deny",
-    "hosts": [
-      {"scheme": "https", "host": "docs.python.org", "access": "allow"},
-      {"scheme": "https", "host": "*.internal.example", "access": "allow"},
-      {"scheme": "https", "host": "blocked.internal.example", "access": "deny"}
-    ]
+    "hosts": [{"scheme": "https", "host": "docs.example.org", "access": "allow"}]
   }
 }
 ```
 
-Path decisions operate on canonicalized absolute paths, and more specific path rules override broader ones. Network rules use **hostnames, protocols and optional ports**, not unrestricted URL substrings. Explicit later host matches can veto wildcard matches. Configured AI model provider APIs and separately approved Git remotes are handled independently and are **not** intercepted by this network list. For SSH-based Git access, continue to use project-specific approved remotes rather than treating an SSH hostname as a universal network permission.
+This is illustrative only; the wizard generates a project-specific file. Use `agents-opencode access` to edit it interactively. After manual JSON edits, run `agents-opencode sync-access` and restart OpenCode. The access-check and access-fetch helper examples in generated project instructions use Python; on Windows, use the Python launcher available on your system (for example `py -3`).
 
-### Use the allowlist wizard or edit JSON manually
+OpenCode 1.x cannot restrict `webfetch` to individual hostnames. With configured host rules, the generated permissions disable unrestricted web fetch/search and provide an allowlisted GET helper. That helper is still not a firewall: shell programs, plugins, symlinks, and subprocesses may bypass the policy. Provider/model API traffic is handled separately. For enforced restrictions, use OS/VM/container isolation and network controls.
 
-From the project directory:
+## Files written in a configured project
 
-```bash
-agents-opencode access        # Interactive allow/deny for paths, shares and hostnames
-# or edit AGENT_ACCESS_POLICY.json in your editor, then:
-agents-opencode sync-access  # Validate and update OpenCode tool permissions and instruction files
-```
+The manager writes or updates `AGENTS.md`, `PROJECT_POLICY.md`, `AGENT_ACCESS_POLICY.json`, and `opencode.json`, and creates `.opencode/` containing the selected agent profiles, team instructions, a manifest, and policy helper tools. It backs up files that it changes. It merges the ordinary JSON object in `opencode.json`; it does not support commented JSONC (`opencode.jsonc`) as input. Existing unrelated/global settings and parent configuration should be reviewed separately.
 
-Restart OpenCode after policy changes. A manual JSON edit without `sync-access` does **not** regenerate the agent instructions or native permissions.
+## Custom agents and tests
 
-### Optional policy checks and approved web documentation
+Custom English agent profiles are kept in the user's central manager data directory and can be copied to another user's custom-profile directory or included in a separately curated archive. On Windows, central install data is under `%LOCALAPPDATA%\agents-opencode`; on Linux it is under the XDG data directory or `~/.local/share/agents-opencode`.
 
-```bash
-python3 .opencode/tools/access_check.py path read /mnt/team-documents/readme.txt
-python3 .opencode/tools/access_check.py path write /mnt/team-documents/readme.txt
-python3 .opencode/tools/access_check.py url https://docs.python.org/3/
-python3 .opencode/tools/access_fetch.py https://docs.python.org/3/
-```
+**Verification status:** the repository includes Python and platform-specific tests. Linux checks have been run, but native Windows installation and end-to-end use have not been verified here; some Windows-specific tests are skipped on Linux. OpenCode behavior and model availability depend on the separately installed local version and providers. No model capability or remote endpoint is certified by this installer.
 
-`access_check.py` returns 0 for ALLOW, 2 for ASK, and 3 for DENY. It never accesses the target; it is an advisory policy inspector. `access_fetch.py` runs a real read-only **GET** only when the hostname is explicitly allowed: it limits output to 2 MiB, has a short timeout, and refuses redirects. It does not allow arbitrary shell or network traffic on the host. Neither tool is a firewall or a security sandbox.
+## Developing this repository: curated Git boundary
 
-**OpenCode v1.x limitation:** `webfetch` can only be `allow/ask/deny`, without hostname-specific rules. When a hostname list is configured, the installer therefore blocks unrestricted `webfetch`/`websearch` and provides `access_fetch.py` for explicitly allowlisted GET requests instead. If normal `bash` is permitted, an agent or subprocess can still bypass these policy checks by using other programs. `read`/`edit`/`external_directory` rules are also best-effort OpenCode controls, not reliable isolation of mounts or secrets. `--auto` automatically approves `ask`; do not use it as a way to enforce an access-control boundary.
+This repository can install its own agents without versioning that local
+installation. Maintain distributed profiles in `lib/profiles/`, shared
+templates and installer logic in `lib/`, and regression tests in `tests/`.
+The entry points, `.gitignore` and deliberately maintained product documentation
+(such as this README and `START_HAR.md`) also belong in Git.
 
-**If enforced allowlists are required**, configure restricted mounts/UIDs with container or VM isolation and use a firewall, DNS/proxy policies or equivalent egress rules. For example, don't mount private directories into an unattended VM. Do not store host credentials in the VM. Only grant it the network services and shares you want it to reach. Your cloud-model provider receives inference prompts outside the agent-initiated network allowlist; project data classification remains a separate control.
+The root `.gitignore` excludes `.opencode/`, generated root configuration
+(`AGENTS.md`, `PROJECT_POLICY.md`, `AGENT_ACCESS_POLICY.json`, `opencode.json`
+and `opencode.jsonc`), installer backups and `.local-work/`. Put working notes,
+logs, decisions, handoffs and checkpoints in `.local-work/`; do not distribute
+them as product documentation. New files elsewhere require explicit review.
+These rules apply to this development repository, not automatically to projects
+configured by the installer. Ignoring files does not restrict model access.
 
-## Files written inside a project
+**First check at every task start or resumption:** inspect `git status --short
+--untracked-files=normal`, `git ls-files`, `git ls-files -ci --exclude-standard`
+and `git diff --cached --name-status`. Confirm local artifacts are ignored with
+`git check-ignore`. If local artifacts are tracked or staged, stop and resolve
+the discrepancy without deleting user files. Ignore rules do not untrack files
+already in Git, and can be bypassed with `git add -f`.
 
-```text
-project/
-  AGENTS.md                                # Existing content preserved; one managed section
-  PROJECT_POLICY.md                        # Generated project-level summary (backed up)
-  AGENT_ACCESS_POLICY.json                 # Declarative per-project allow/deny rules
-  opencode.json                            # Models, provider allowlist and OpenCode permissions
-  .opencode/
-    agentteam-manifest.json                # Selection and permissions for later reconfiguration
-    agents/<only selected role names>.md    # English role profiles
-    team/TEAM_RULES.md
-    team/WORKFLOW.md
-    team/HANDOFF_TEMPLATE.md
-    team/ACCESS_RULES.md                   # Generated English policy instructions, loaded by OpenCode
-    tools/access_check.py                  # Advisory read/write/URL decision helper
-    tools/access_fetch.py                  # Read-only HTTP GET for approved hosts
-```
-
-`opencode.json` is **merged with the existing JSON object**: unrelated settings, provider definitions and `small_model` are preserved; the chosen project-specific `model`, managed `agent.*.model`, `enabled_providers` and `permission` reflect this wizard. No models are hardcoded in the supplied agent Markdown files. Existing non-managed agent files are preserved. When an already managed role is deselected it is backed up and removed from the installed project.
-
-The setup tool currently handles standard `opencode.json` JSON, not commented JSONC. For existing `opencode.jsonc`, migrate or merge manually first; do not assume this tool has covered all global/special OpenCode configuration sources.
-
-## Migrating an earlier v1.x agentteam installation
-
-1. Extract and install this manager with `bash install.sh`; it replaces the previous central manager, not your project.
-2. Enter the existing repo (for example `cd ~/git/minroj`), run `agents-opencode install`, choose the **desired subset** and models, then review permissions.
-3. The program detects known old team-agent files, backs up changed files, and replaces their old per-agent YAML permissions with centrally configured project permissions. Your existing unrelated JSON configuration and `AGENTS.md` content are kept. Known legacy managed instructions in `AGENTS.md` are replaced by the new managed block; nonstandard older text may need manual review.
-4. Inspect `git diff -- AGENTS.md opencode.json` and `git status --short` before committing. Files from the **old project-local helper package** such as `.opencode/tools/git_sync.py` are deliberately not deleted because they may be in use; remove them manually after checking.
-
-## Creating and sharing custom agents
-
-Select **6 – Create a reusable agent**, or run `agents-opencode add-agent`. Give an agent slug, English description and multi-line prompt. End with a line containing only a period (`.`). Custom profiles live in `~/.local/share/agents-opencode/custom-profiles/` (or your `XDG_DATA_HOME`). They appear in future project agent-selection menus and survive reinstallation of the central manager. You can copy those `.md` files to another colleague's `custom-profiles/` folder, or include them in a separately distributed archive.
-
-## Checking the installation
-
-```bash
-agents-opencode --version
-agents-opencode status ~/git/my-project
-cd ~/git/my-project
-opencode agent list | grep -E 'orchestrator|system-architect|technical-documenter'
-```
-
-A custom role must be installed in a project before OpenCode can use it there. Model names and tool support depend on the local OpenCode installation; the installer cannot benchmark or validate whether a specific text model supports image inputs or reliable tool calling.
-
-## Test status
-
-The Python logic, path and hostname decision logic, and OpenCode config generation have been unit-tested locally with simulated model lists; the shell installer uses a portable user-level entry point. **Not yet end-to-end tested on your specific Fedora/OpenCode 1.19.5 installation.** No tests send code to model providers or modify your actual repositories.
+The ignored local `AGENTS.md` repeats this instruction **outside** the managed
+markers, where reinstallation preserves it. On a fresh clone, add that local
+instruction when setting up the development agents; it is intentionally not
+shipped as part of the installed agent profiles. Before an authorized commit,
+review the staged diff and stage only explicit curated paths, never `git add .`
+or `git add -A`.

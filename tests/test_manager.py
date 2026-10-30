@@ -78,4 +78,36 @@ class TestInstaller(unittest.TestCase):
   self.assertNotIn('# Project AI team instructions',content)
   self.assertEqual(content.count(mgr.MARK_OPEN),1)
 
+class TestCharacterProfiles(unittest.TestCase):
+ def test_cast_matches_profiles_and_keeps_personas_nonbinding(self):
+  import re
+  cast=(MANAGER.parents[1]/'AGENT_CAST.md').read_text()
+  profiles=mgr.profiles()
+  rows=re.findall(r'^\| ([a-z-]+) \| \*\*(\w+) \((\d+), (she/her|he/him)\)\*\*',cast,re.M)
+  self.assertEqual({row[0] for row in rows},set(profiles))
+  self.assertEqual(len(rows),23)
+  self.assertEqual(len({row[1] for row in rows}),23)
+  self.assertEqual(sum(row[3]=='she/her' for row in rows),12)
+  self.assertEqual(sum(row[3]=='he/him' for row in rows),11)
+  self.assertGreaterEqual(max(int(row[2]) for row in rows)-min(int(row[2]) for row in rows),30)
+  for role,name,age,pronouns in rows:
+   with self.subTest(role=role):
+    text=profiles[role].read_text()
+    self.assertIn(f'{name}, {age}, {pronouns}',text)
+    self.assertIn('Fictional presentation only; never enact this backstory',text)
+    for label in ('Drive','Reasoning style','Collaboration style','Self-check'):
+     self.assertIn(f'**{label}:**',text)
+
+ def test_install_copies_all_profiles_and_persona_rules_exactly(self):
+  with tempfile.TemporaryDirectory() as directory:
+   project=Path(directory)
+   profiles=mgr.profiles()
+   mgr.apply(project,list(profiles),{name:'test/model' for name in profiles},PERM,'SHAREABLE')
+   for name,source in profiles.items():
+    with self.subTest(role=name):
+     self.assertEqual((project/'.opencode/agents'/f'{name}.md').read_bytes(),source.read_bytes())
+   rules=(project/'.opencode/team/TEAM_RULES.md').read_bytes()
+   self.assertEqual(rules,(mgr.ROOT/'TEAM_RULES.md').read_bytes())
+   self.assertIn(b'No favoritism, secrecy, romantic advances at work',rules)
+
 if __name__=='__main__': unittest.main()

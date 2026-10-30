@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """OpenCode v1.x portable user-level agent team installer. Python stdlib only.
-The user-facing command is the `agents-opencode` Bash script.
+The user-facing command is the installed `agents-opencode` launcher.
 """
 import json
 import os
@@ -13,7 +13,8 @@ from pathlib import Path
 from urllib.parse import urlsplit
 if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-from access_check import load_policy, validate, path_decision, url_decision
+from access_check import load_policy, validate, path_decision, url_decision, is_filesystem_root, absolute_policy_path
+from i18n import set_language, get_language, select_language, tr
 
 VERSION = '2.1.0'
 ROOT = Path(__file__).resolve().parent
@@ -33,13 +34,13 @@ def prompt(msg, default=''):
     return value if value else default
 
 def confirm(msg, default=False):
-    hint = 'J/n' if default else 'j/N'
+    hint = tr('J/n', 'Y/n') if default else tr('j/N', 'y/N')
     while True:
         ans = input(f'{msg} [{hint}]: ').strip().lower()
         if not ans: return default
         if ans in ('j','ja','y','yes'): return True
         if ans in ('n','nej','no'): return False
-        say('Svara j eller n.')
+        say(tr('Svara j eller n.', 'Answer y or n.'))
 
 def choose(msg, options, default=''):
     for k, desc in options: say(f'  {k}) {desc}')
@@ -47,15 +48,20 @@ def choose(msg, options, default=''):
     while True:
         ans=prompt(msg,default)
         if ans in accepted: return ans
-        say('Ogiltigt val.')
+        say(tr('Ogiltigt val.', 'Invalid choice.'))
 
 def policy_action(title, default):
     d = {'allow':'a','ask':'q','deny':'d'}[default]
-    return ACTIONS[choose(title, [('a','Tillåt utan fråga'),('q','Fråga varje gång'),('d','Neka')],d)]
+    return ACTIONS[choose(title, [('a',tr('Tillåt utan fråga','Allow without asking')),('q',tr('Fråga varje gång','Ask every time')),('d',tr('Neka','Deny'))],d)]
+
+
+def action_label(value):
+    if isinstance(value, bool): return tr('ja','yes') if value else tr('nej','no')
+    return {'allow':tr('tillåt','allow'), 'ask':tr('fråga','ask'), 'deny':tr('neka','deny')}.get(value, value)
 
 def project_dir(arg=None):
     if arg: return Path(arg).expanduser().resolve()
-    return Path(prompt('Projektkatalog',str(Path.cwd()))).expanduser().resolve()
+    return Path(prompt(tr('Projektkatalog','Project directory'),str(Path.cwd()))).expanduser().resolve()
 
 def profiles():
     out = {p.stem:p for p in PROFILES.glob('*.md')}
@@ -71,16 +77,16 @@ def titles(filename):
 
 def select_agents(available, old=None):
     ids=list(available)
-    say('\n=== Välj vilka agenter som ska installeras ===')
+    say(tr('\n=== Välj vilka agenter som ska installeras ===','\n=== Choose agents to install ==='))
     for i,name in enumerate(ids,1):
         tick = '*' if (old and name in old) else ' '
         say(f'{i:>2}) [{tick}] {name:26} {titles(available[name])}')
-    say('\nAnge a = alla, c = kärnteamet, siffror (ex. 1,3,6-9) eller Enter för tidigare val.')
+    say(tr('\nAnge a = alla, c = kärnteamet, siffror (ex. 1,3,6-9) eller Enter för tidigare val.','\nEnter a = all, c = core team, numbers (e.g. 1,3,6-9), or Enter for previous selection.'))
     while True:
-        answer=prompt('Agenter', 'föregående' if old else 'c')
+        answer=prompt(tr('Agenter','Agents'), tr('föregående','previous') if old else 'c')
         if answer=='a': selected=ids
         elif answer=='c': selected=[x for x in ('orchestrator','system-architect','technical-documenter') if x in available]
-        elif answer=='föregående' and old: selected=[x for x in ids if x in old]
+        elif answer==tr('föregående','previous') and old: selected=[x for x in ids if x in old]
         else:
             try:
                 ix=set()
@@ -91,13 +97,40 @@ def select_agents(available, old=None):
                 if not ix or any(n<1 or n>len(ids) for n in ix): raise ValueError()
                 selected=[ids[n-1] for n in sorted(ix)]
             except Exception:
-                say('Ogiltig lista. Exempel: a, c, 1,3,6-9'); continue
+                say(tr('Ogiltig lista. Exempel: a, c, 1,3,6-9','Invalid list. Examples: a, c, 1,3,6-9')); continue
         if selected:
-            say(f'Valt {len(selected)}: '+', '.join(selected))
+            say(tr('Valt {count}: ','Selected {count}: ').format(count=len(selected))+', '.join(selected))
             if 'orchestrator' not in selected:
-                say('OBS: Orkestreraren saknas. Du måste själv leda teamet eller välja en annan huvudagent.')
-            if confirm('Använd detta urval?',True): return selected
-        else: say('Välj minst en agent.')
+                say(tr('OBS: Orkestreraren saknas. Du måste själv leda teamet eller välja en annan huvudagent.','NOTE: No orchestrator selected. Lead the team yourself or choose another primary agent.'))
+            if confirm(tr('Använd detta urval?','Use this selection?'),True): return selected
+        else: say(tr('Välj minst en agent.','Choose at least one agent.'))
+
+
+def opencode_command(arguments=(), executable=None, windows=None):
+    """Resolve the actual executable; batch shims accept only fixed manager flags.
+
+    cmd.exe needs its own outer quotes for a quoted executable with spaces.
+    No project path or other user input is interpolated into the shell command.
+    Reject shell metacharacters even in the resolved shim path (fail closed).
+    """
+    allowed = {'models', '--continue', '--auto'}
+    if any(arg not in allowed for arg in arguments):
+        raise ValueError(tr('Otillåtet OpenCode-argument','Unsupported OpenCode argument'))
+    executable = executable or shutil.which('opencode')
+    if not executable:
+        raise RuntimeError(tr('opencode saknas i PATH; installera/autentisera OpenCode först.',
+                              'opencode is not in PATH; install/authenticate OpenCode first.'))
+    windows = os.name == 'nt' if windows is None else windows
+    if windows and executable.lower().endswith(('.cmd', '.bat')):
+        if any(c in executable for c in '\r\n"%!' + '&|<>^'):
+            raise RuntimeError(tr('Osäker sökväg till OpenCode-kommandofil','Unsafe OpenCode batch shim path'))
+        command = '""' + executable + '"' + ''.join(' ' + a for a in arguments) + '"'
+        # A list would go through subprocess.list2cmdline, whose backslash quote
+        # escaping is for C argv parsers, NOT cmd.exe's /c grammar. Supply the
+        # exact CreateProcess command line instead (still shell=False).
+        interpreter = shutil.which('cmd.exe') or 'cmd.exe'
+        return subprocess.list2cmdline([interpreter]) + ' /d /s /c ' + command
+    return [executable, *arguments]
 
 def list_models(cwd):
     # Test hook: no runtime dependency on mock data. Real installations call OpenCode.
@@ -105,39 +138,38 @@ def list_models(cwd):
     if fixture:
         text=Path(fixture).read_text()
     else:
-        if not shutil.which('opencode'):
-            raise RuntimeError('opencode saknas i PATH; installera/autentisera OpenCode först.')
-        say('\nHämtar modellistan med: opencode models')
-        r=subprocess.run(['opencode','models'],cwd=cwd,capture_output=True,text=True,timeout=90)
-        if r.returncode: raise RuntimeError('opencode models misslyckades:\n'+r.stderr[-1000:])
+        cmd=opencode_command(['models'])
+        say(tr('\nHämtar modellistan med: opencode models','\nFetching model list with: opencode models'))
+        r=subprocess.run(cmd,cwd=cwd,capture_output=True,text=True,timeout=90)
+        if r.returncode: raise RuntimeError(tr('opencode models misslyckades:\n','opencode models failed:\n')+r.stderr[-1000:])
         text=r.stdout
     result=[]
     for line in text.splitlines():
         value=line.strip()
         if re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_./:@-]*',value):
             if value not in result: result.append(value)
-    if not result: raise RuntimeError('Inga modell-ID hittades i opencode models.')
+    if not result: raise RuntimeError(tr('Inga modell-ID hittades i opencode models.','No model IDs found in opencode models.'))
     return result
 
 def pick_model(name, catalog, old=None, previous=None):
-    say(f'\n=== Modell för {name} ===')
-    say(f'Nuvarande: {old or "ingen vald"}. Alla {len(catalog)} modeller visas:')
+    say(tr('\n=== Modell för {name} ===','\n=== Model for {name} ===').format(name=name))
+    say(tr('Nuvarande: {old}. Alla {count} modeller visas:','Current: {old}. All {count} models are shown:').format(old=old or tr('ingen vald','none selected'), count=len(catalog)))
     for i,m in enumerate(catalog,1): say(f'{i:>3}) {m}')
     hints=[]
-    if old: hints.append('Enter = behåll')
-    if previous: hints.append('p = använd föregående val')
-    hints.append('i = ärv från anropande agent')
+    if old: hints.append(tr('Enter = behåll','Enter = keep'))
+    if previous: hints.append(tr('p = använd föregående val','p = use previous choice'))
+    hints.append(tr('i = ärv från anropande agent','i = inherit from calling agent'))
     say(' | '.join(hints))
     while True:
-        v=prompt('Modellnummer')
+        v=prompt(tr('Modellnummer','Model number'))
         if not v and old: return old
         if v.lower()=='i': return None
         if v.lower()=='p' and previous: return previous
         if v.isdigit() and 1<=int(v)<=len(catalog):
             m=catalog[int(v)-1]
-            if name=='image-analyst': say('OBS: kontrollera att modellen verkligen har stöd för bildinmatning.')
+            if name=='image-analyst': say(tr('OBS: kontrollera att modellen verkligen har stöd för bildinmatning.','NOTE: verify that the model actually supports image input.'))
             return m
-        say('Ange ett nummer från listan'+(', p, i eller Enter' if old else ', p eller i')+'.')
+        say(tr('Ange ett nummer från listan','Enter a number from the list')+(tr(', p, i eller Enter',', p, i or Enter') if old else tr(', p eller i',', p or i'))+'.')
 
 def assign_models(selected, catalog, existing=None):
     results={}; last=None
@@ -152,10 +184,10 @@ def json_load(path):
     if not path.exists(): return {}
     try:
         v=json.loads(path.read_text(encoding='utf-8'))
-        if not isinstance(v,dict): raise ValueError('Root must be an object')
+        if not isinstance(v,dict): raise ValueError(tr('Roten måste vara ett objekt','Root must be an object'))
         return v
     except (ValueError,UnicodeError) as ex:
-        raise RuntimeError(f'{path} kunde inte läsas som vanlig JSON. Gör om JSONC till JSON innan ändring: {ex}')
+        raise RuntimeError(tr('{path} kunde inte läsas som vanlig JSON. Gör om JSONC till JSON innan ändring: {ex}','{path} could not be read as plain JSON. Convert JSONC to JSON before editing: {ex}').format(path=path,ex=ex))
 
 def backup(path):
     if path.exists():
@@ -179,66 +211,70 @@ def read_manifest(project):
     except Exception: return {}
 
 def choose_mode():
-    say('\n=== Projektets informationsklassning ===')
-    k=choose('Välj klassning',[('1','PRIVATE: endast godkända lokala modellanslutningar'),('2','SHAREABLE: godkända molnmodeller, projektets tillåtna data'),('3','HYBRID: lokal + moln; sekretess måste hanteras separat')],'1')
+    say(tr('\n=== Projektets informationsklassning ===','\n=== Project data classification ==='))
+    k=choose(tr('Välj klassning','Choose classification'),[('1',tr('PRIVATE: endast godkända lokala modellanslutningar','PRIVATE: approved local model connections only')),('2',tr('SHAREABLE: godkända molnmodeller, projektets tillåtna data','SHAREABLE: approved cloud models, permitted project data')),('3',tr('HYBRID: lokal + moln; sekretess måste hanteras separat','HYBRID: local + cloud; confidentiality must be handled separately'))],'1')
     mode={'1':'PRIVATE','2':'SHAREABLE','3':'HYBRID'}[k]
     if mode=='PRIVATE':
-        say('KRITISKT: verktyget kan inte avgöra om en provider faktiskt vidarebefordrar data till molnet.')
-        if not confirm('Bekräftar du att ALLA valda modeller verkligen är lokalt hostade och att projektet får skickas till dessa endpoints?',False):
-            raise RuntimeError('PRIVATE kräver verifierad lokal modellanslutning. Avbrutet.')
+        say(tr('KRITISKT: verktyget kan inte avgöra om en provider faktiskt vidarebefordrar data till molnet.','CRITICAL: this tool cannot determine whether a provider forwards data to the cloud.'))
+        if not confirm(tr('Bekräftar du att ALLA valda modeller verkligen är lokalt hostade och att projektet får skickas till dessa endpoints?','Do you confirm ALL selected models are actually hosted locally and this project may be sent to those endpoints?'),False):
+            raise RuntimeError(tr('PRIVATE kräver verifierad lokal modellanslutning. Avbrutet.','PRIVATE requires verified local model connections. Cancelled.'))
     else:
-        if not confirm('Får godkända molnmodeller behandla den delbara källkod och kontext som ligger i projektet?',False):
-            raise RuntimeError('Molnbehandling inte godkänd. Avbrutet.')
+        if not confirm(tr('Får godkända molnmodeller behandla den delbara källkod och kontext som ligger i projektet?','May approved cloud models process the shareable source code and context in this project?'),False):
+            raise RuntimeError(tr('Molnbehandling inte godkänd. Avbrutet.','Cloud processing not approved. Cancelled.'))
     return mode
 
 def ask_mounts():
     mounts=[]
-    say('Ange absoluta katalogsökvägar för tillåtna nätverksdiskar. Tom rad avslutar.')
+    say(tr('Ange absoluta katalogsökvägar för tillåtna nätverksdiskar. Tom rad avslutar.','Enter absolute directory paths for permitted network shares. A blank line finishes.'))
     while True:
-        val=prompt('Monterad katalog (eller Enter)')
+        val=prompt(tr('Monterad katalog (eller Enter)','Mounted directory (or Enter)'))
         if not val: break
-        p=Path(val).expanduser().resolve()
-        if not p.is_dir() or not p.is_absolute(): say('Katalogen måste finnas som en absolut sökväg.'); continue
-        r=policy_action(f'Läsa {p}', 'allow')
-        w=policy_action(f'Skriva {p}', 'deny')
+        try:
+            p=absolute_policy_path(val).resolve()
+        except ValueError:
+            say(tr('Ange en absolut sökväg utan enhetsnamnrymder.','Enter an absolute path without device namespaces.'))
+            continue
+        if not p.is_dir() or not p.is_absolute(): say(tr('Katalogen måste finnas som en absolut sökväg.','The directory must exist at an absolute path.')); continue
+        r=policy_action(tr('Läsa {path}','Read {path}').format(path=p), 'allow')
+        w=policy_action(tr('Skriva {path}','Write {path}').format(path=p), 'deny')
         mounts.append({'path':str(p),'read':r,'write':w})
     return mounts
 
 def permission_wizard(existing=None):
-    say('\n=== Behörighetsguide ===')
+    say(tr('\n=== Behörighetsguide ===','\n=== Permission wizard ==='))
     presets={
       '1':dict(shell='ask',file_edit='ask',gitpush='deny',internet='deny',outside_read='deny',outside_write='deny',sudo='deny',destructive='deny',secrets='deny',mcp='deny',packages='deny',hardware='deny',unattended=False),
       '2':dict(shell='allow',file_edit='allow',gitpush='ask',internet='ask',outside_read='deny',outside_write='deny',sudo='deny',destructive='ask',secrets='deny',mcp='ask',packages='ask',hardware='deny',unattended=False),
       '3':dict(shell='allow',file_edit='allow',gitpush='allow',internet='allow',outside_read='allow',outside_write='allow',sudo='allow',destructive='allow',secrets='ask',mcp='allow',packages='allow',hardware='ask',unattended=True)
     }
-    say('Förinställningar ändrar bara behörigheter, ALDRIG modellval.')
-    n=choose('Startläge',[('1','Låst arbetsdator'),('2','Utvecklingsdator'),('3','Isolerad VM med stora rättigheter'),('4','Utgå från projektets nuvarande behörigheter')], '4' if existing else '2')
+    say(tr('Förinställningar ändrar bara behörigheter, ALDRIG modellval.','Presets change permissions only, NEVER model choices.'))
+    n=choose(tr('Startläge','Starting preset'),[('1',tr('Låst arbetsdator','Locked-down workstation')),('2',tr('Utvecklingsdator','Development workstation')),('3',tr('Isolerad VM med stora rättigheter','Isolated VM with broad permissions')),('4',tr('Utgå från projektets nuvarande behörigheter','Use current project permissions'))], '4' if existing else '2')
     base=dict(existing) if n=='4' and existing else dict(presets.get(n,presets['2']))
-    say('\nJustera vart och ett av valen (a=allow, q=ask, d=deny):')
+    say(tr('\nJustera vart och ett av valen (a=allow, q=ask, d=deny):','\nAdjust each setting (a=allow, q=ask, d=deny):'))
     # Repair older v2 manifests that do not contain newly introduced controls.
     for k,default in [('file_edit','allow'),('mcp','ask'),('packages','ask'),('hardware','deny')]: base.setdefault(k,default)
-    base['shell']=policy_action('Shellkommandon generellt',base['shell'])
-    base['file_edit']=policy_action('Skriva/redigera projektfiler genom OpenCodes filverktyg',base['file_edit'])
-    base['gitpush']=policy_action('Git push mot remote',base['gitpush'])
-    base['internet']=policy_action('Internet via OpenCode webfetch/websearch + direkt curl/wget/ssh i shell',base['internet'])
-    base['outside_read']=policy_action('Läsa utanför projektmappen med OpenCodes filverktyg',base['outside_read'])
-    base['outside_write']=policy_action('Skriva utanför projektmappen med OpenCodes filverktyg',base['outside_write'])
-    base['sudo']=policy_action('Sudo och privilegierade kommandon',base['sudo'])
-    base['destructive']=policy_action('Potentiellt destruktiva shellkommandon',base['destructive'])
-    base['secrets']=policy_action('Läsa hemligheter/nyckelfiler med filverktyg',base['secrets'])
-    base['mcp']=policy_action('Anropa externa MCP-verktyg och anslutna externa tjänster',base['mcp'])
-    base['packages']=policy_action('Installera system- eller språkpaket via vanliga kommandomönster',base['packages'])
-    base['hardware']=policy_action('Firmwareflashning och verktyg för hårdvarusändning (best effort)',base['hardware'])
-    base['mounts']=ask_mounts() if confirm('Konfigurera specifika nätverksdiskar nu?',bool(base.get('mounts'))) else base.get('mounts',[])
-    say('\nObevakad körning med --auto godkänner även regler som annars skulle fråga.')
-    base['unattended']=confirm('Aktivera obevakat läge för detta projekt?',bool(base.get('unattended')))
+    base['shell']=policy_action(tr('Shellkommandon generellt','Shell commands in general'),base['shell'])
+    base['file_edit']=policy_action(tr('Skriva/redigera projektfiler genom OpenCodes filverktyg','Write/edit project files through OpenCode file tools'),base['file_edit'])
+    base['gitpush']=policy_action(tr('Git push mot remote','Git push to remote'),base['gitpush'])
+    base['internet']=policy_action(tr('Internet via OpenCode webfetch/websearch + direkt curl/wget/ssh i shell','Internet via OpenCode webfetch/websearch + direct curl/wget/ssh in shell'),base['internet'])
+    base['outside_read']=policy_action(tr('Läsa utanför projektmappen med OpenCodes filverktyg','Read outside the project with OpenCode file tools'),base['outside_read'])
+    base['outside_write']=policy_action(tr('Skriva utanför projektmappen med OpenCodes filverktyg','Write outside the project with OpenCode file tools'),base['outside_write'])
+    base['sudo']=policy_action(tr('Sudo och privilegierade kommandon','Sudo and privileged commands'),base['sudo'])
+    base['destructive']=policy_action(tr('Potentiellt destruktiva shellkommandon','Potentially destructive shell commands'),base['destructive'])
+    base['secrets']=policy_action(tr('Läsa hemligheter/nyckelfiler med filverktyg','Read secrets/key files with file tools'),base['secrets'])
+    base['mcp']=policy_action(tr('Anropa externa MCP-verktyg och anslutna externa tjänster','Call external MCP tools and connected external services'),base['mcp'])
+    base['packages']=policy_action(tr('Installera system- eller språkpaket via vanliga kommandomönster','Install system or language packages through common command patterns'),base['packages'])
+    base['hardware']=policy_action(tr('Firmwareflashning och verktyg för hårdvarusändning (best effort)','Firmware flashing and hardware transmission tools (best effort)'),base['hardware'])
+    base['mounts']=ask_mounts() if confirm(tr('Konfigurera specifika nätverksdiskar nu?','Configure specific network shares now?'),bool(base.get('mounts'))) else base.get('mounts',[])
+    say(tr('\nObevakad körning med --auto godkänner även regler som annars skulle fråga.','\nUnattended execution with --auto also approves rules that would otherwise ask.'))
+    base['unattended']=confirm(tr('Aktivera obevakat läge för detta projekt?','Enable unattended mode for this project?'),bool(base.get('unattended')))
     if base['shell']=='allow':
-        say('VARNING: shell=allow är lika med värdanvändarens åtkomst. Python, byggskript och Git-hooks kan kringgå mönsterregler för filer/nätverk.')
+        say(tr('VARNING: shell=allow är lika med värdanvändarens åtkomst. Python, byggskript och Git-hooks kan kringgå mönsterregler för filer/nätverk.','WARNING: shell=allow grants the host user’s access. Python, build scripts and Git hooks can bypass file/network patterns.'))
     if base['unattended'] and any(base[k]=='ask' for k in ('gitpush','internet','outside_read','outside_write','sudo','destructive','secrets','packages','hardware','mcp')):
-        say('VARNING: --auto godkänner ASK. Ändra till DENY om en åtgärd verkligen ska förbli blockerad obevakat.')
+        say(tr('VARNING: --auto godkänner ASK. Ändra till DENY om en åtgärd verkligen ska förbli blockerad obevakat.','WARNING: --auto approves ASK. Use DENY if an action must remain blocked when unattended.'))
     if base['shell']=='allow' and base['outside_read']=='deny':
-        say('VARNING: utanför-projekt=deny skyddar inte mot shellkommandon med rättigheter på värdsystemet.')
-    if not confirm('Bekräfta denna behörighetsprofil?',False): raise RuntimeError('Behörighetskonfiguration avbruten')
+        say(tr('VARNING: utanför-projekt=deny skyddar inte mot shellkommandon med rättigheter på värdsystemet.','WARNING: outside-project=deny does not protect against shell commands with host-system permissions.'))
+    if not confirm(tr('Bekräfta denna behörighetsprofil?','Confirm this permission profile?'),False): raise RuntimeError(tr('Behörighetskonfiguration avbruten','Permission configuration cancelled'))
     return base
 
 
@@ -262,18 +298,22 @@ def default_access_policy(project, perm):
 def render_access_rules(access):
     """English instructions injected as an OpenCode instructions file."""
     fs=access['filesystem']; net=access['network']
+    python = 'python' if os.name == 'nt' else 'python3'
+    example = 'C:/absolute/path' if os.name == 'nt' else '/absolute/path'
     lines=['# Agent access rules (project-specific, mandatory instructions)', '',
        '**WARNING: ADVISORY, NOT ACTUAL SECURITY.** These rules describe authorized behavior, not an operating-system sandbox.',
        'A permitted shell command, program, symlink, Git hook or plugin can bypass these rules. Never interpret this document as technical isolation.',
-       'Before accessing resources, consult `AGENT_ACCESS_POLICY.json`. When unsure, use `python3 .opencode/tools/access_check.py path read /absolute/path`,',
-       '`python3 .opencode/tools/access_check.py path write /absolute/path`, or `python3 .opencode/tools/access_check.py url https://host/path`.',
+       f'Before accessing resources, consult `AGENT_ACCESS_POLICY.json`. When unsure, use `{python} .opencode/tools/access_check.py path read {example}`,',
+       f'`{python} .opencode/tools/access_check.py path write {example}`, or `{python} .opencode/tools/access_check.py url https://host/path`.',
        'These checks are advisory and do not perform the operation. Deny means stop; ask means request user authorization (do not treat --auto as approval to expand the policy).',
-       'For explicitly allowed public HTTP(S) sites, `python3 .opencode/tools/access_fetch.py https://allowed-host/path` can retrieve up to 2 MiB (GET only; no redirects).',
+       f'For explicitly allowed public HTTP(S) sites, `{python} .opencode/tools/access_fetch.py https://allowed-host/path` can retrieve up to 2 MiB (GET only; no redirects).',
        'Never rewrite the policy or this document as a workaround. Request changes from the owner through agents-opencode.',
        '', '## Filesystem',
-       '- The project directory is permitted for normal project work. The filesystem root `/` and all other locations are **denied by default** unless explicitly allowed below.',
+       '- The project directory is permitted for normal project work. Filesystem roots (POSIX `/`, Windows drive roots and UNC share roots) and all other locations are **denied by default** unless explicitly allowed below.',
        '- Resolved paths (including symlinks) count; a mount can be read-only independently of local paths.',
        f"- Outside defaults: read={fs['default_outside']['read'].upper()}, write={fs['default_outside']['write'].upper()}." ]
+    if os.name == 'nt':
+        lines.append('- Windows: use Python 3 as `python` (or `py -3` if needed). Drive/UNC path patterns and command restrictions are best effort; PowerShell, cmd.exe, batch shims and alternate path spellings can bypass them. Use OS isolation for enforcement.')
     if fs['default_outside']['read']!='deny' or fs['default_outside']['write']!='deny':
         lines.append('- BROAD ACCESS EXCEPTION: the owner explicitly selected permissive defaults (e.g. VM mode). This is a deliberate override of root-deny behavior.')
     for r in fs.get('paths',[]):
@@ -295,53 +335,68 @@ def render_access_rules(access):
 def access_wizard(project, access):
     """Edit one shared declarative policy. A sorted path rule can override broader rules."""
     access=json.loads(json.dumps(access))
-    say('\n=== Åtkomstpolicy: whitelist / blacklist (INTE en säker sandbox) ===')
-    say('Projektmappen tillåts. Root / och övriga kataloger nekas som standard.')
+    say(tr('\n=== Åtkomstpolicy: whitelist / blacklist (INTE en säker sandbox) ===','\n=== Access policy: allowlist / denylist (NOT a secure sandbox) ==='))
+    say(tr('Projektmappen tillåts. Filsystemrötter och övriga kataloger nekas som standard.','The project directory is allowed. Filesystem roots and other directories are denied by default.'))
     fs=access['filesystem']; net=access['network']
-    if confirm('Ändra standardåtkomst utanför projektet?',False):
-        fs['default_outside']['read']=policy_action('Standard: läsa utanför projektet',fs['default_outside']['read'])
-        fs['default_outside']['write']=policy_action('Standard: skriva utanför projektet',fs['default_outside']['write'])
-    if confirm('Ange tillåtna/blockerade lokala kataloger eller nätverksdiskar?',False):
-        say('Ange absolut sökväg. Varje katalogregel omfattar även underkataloger. Tomt avslutar.')
+    if confirm(tr('Ändra standardåtkomst utanför projektet?','Change default access outside the project?'),False):
+        fs['default_outside']['read']=policy_action(tr('Standard: läsa utanför projektet','Default: read outside project'),fs['default_outside']['read'])
+        fs['default_outside']['write']=policy_action(tr('Standard: skriva utanför projektet','Default: write outside project'),fs['default_outside']['write'])
+    if confirm(tr('Ange tillåtna/blockerade lokala kataloger eller nätverksdiskar?','Specify allowed/blocked local directories or network shares?'),False):
+        say(tr('Ange absolut sökväg. Varje katalogregel omfattar även underkataloger. Tomt avslutar.','Enter an absolute path. Each directory rule includes subdirectories. Blank finishes.'))
         while True:
-            value=prompt('Sökväg')
+            value=prompt(tr('Sökväg','Path'))
             if not value: break
-            path=str(Path(value).expanduser().resolve())
-            if path=='/':
-                say('En explicit allow för / stöds inte. Välj bred VM-standard om den nivån av åtkomst behövs.'); continue
-            kind=choose('Typ',[('1','Lokal sökväg'),('2','Monterad nätverksdisk')],'1')
-            r=policy_action('Läsa', 'allow'); w=policy_action('Skriva','deny')
+            try:
+                path=str(absolute_policy_path(value).resolve())
+            except ValueError:
+                say(tr('Ange en absolut sökväg utan enhetsnamnrymder.','Enter an absolute path without device namespaces.'))
+                continue
+            if is_filesystem_root(path):
+                say(tr('En explicit allow för en filsystemrot stöds inte. Välj bred VM-standard om den nivån av åtkomst behövs.','Explicit allow for a filesystem root is not supported. Choose broad VM defaults if that level of access is needed.')); continue
+            kind=choose(tr('Typ','Type'),[('1',tr('Lokal sökväg','Local path')),('2',tr('Monterad nätverksdisk','Mounted network share'))],'1')
+            r=policy_action(tr('Läsa','Read'), 'allow'); w=policy_action(tr('Skriva','Write'),'deny')
             fs['paths']=[x for x in fs['paths'] if x['path']!=path]
             fs['paths'].append({'path':path,'kind':'network-share' if kind=='2' else 'local','read':r,'write':w})
-        if fs['paths'] and confirm('Ta bort någon befintlig katalogregel?',False):
-            for i,x in enumerate(fs['paths'],1): say(f'{i}) {x["path"]} ({x["read"]}/{x["write"]})')
-            number=prompt('Nummer (Enter=ingen)')
+        if fs['paths'] and confirm(tr('Ta bort någon befintlig katalogregel?','Remove an existing directory rule?'),False):
+            for i,x in enumerate(fs['paths'],1): say(f'{i}) {x["path"]} ({action_label(x["read"])}/{action_label(x["write"])})')
+            number=prompt(tr('Nummer (Enter=ingen)','Number (Enter=none)'))
             if number.isdigit() and 1<=int(number)<=len(fs['paths']):fs['paths'].pop(int(number)-1)
-    if confirm('Ändra standardåtkomst för agenters internetanrop?',False):
-        net['default']=policy_action('Standard: internet',net['default'])
-    if confirm('Ange tillåtna/blockerade internetvärdar?',False):
-        say('Ange värdnamn, t.ex. docs.python.org eller *.example.org. Tomt avslutar.')
+    if confirm(tr('Ändra standardåtkomst för agenters internetanrop?','Change default access for agent internet requests?'),False):
+        net['default']=policy_action(tr('Standard: internet','Default: internet'),net['default'])
+    if confirm(tr('Ange tillåtna/blockerade internetvärdar?','Specify allowed/blocked internet hosts?'),False):
+        say(tr('Ange värdnamn, t.ex. docs.python.org eller *.example.org. Tomt avslutar.','Enter a hostname, e.g. docs.python.org or *.example.org. Blank finishes.'))
         while True:
-            host=prompt('Värdnamn')
+            host=prompt(tr('Värdnamn','Hostname'))
             if not host: break
             if '/' in host or any(c.isspace() for c in host):
-                say('Endast värdnamn, inte hel URL.'); continue
-            scheme=choose('Protokoll',[('1','https'),('2','http'),('3','ssh')],'1')
-            port=prompt('Port, Enter = standard')
-            if port and (not port.isdigit() or not 1<=int(port)<=65535):say('Ogiltig port'); continue
-            action=policy_action('Åtkomst', 'allow')
+                say(tr('Endast värdnamn, inte hel URL.','Hostname only, not a full URL.')); continue
+            scheme=choose(tr('Protokoll','Protocol'),[('1','https'),('2','http'),('3','ssh')],'1')
+            port=prompt(tr('Port, Enter = standard','Port, Enter = default'))
+            if port and (not port.isdigit() or not 1<=int(port)<=65535):say(tr('Ogiltig port','Invalid port')); continue
+            action=policy_action(tr('Åtkomst','Access'), 'allow')
             entry={'host':host.lower(),'scheme':{'1':'https','2':'http','3':'ssh'}[scheme],'access':action}
             if port:entry['port']=int(port)
             net['hosts']=[r for r in net['hosts'] if (r['host'],r.get('scheme'),r.get('port'))!=(entry['host'],entry['scheme'],entry.get('port'))]
             net['hosts'].append(entry)
-        if net['hosts'] and confirm('Ta bort någon befintlig värdregel?',False):
-            for i,x in enumerate(net['hosts'],1):say(f'{i}) {x.get("scheme","https")}://{x["host"]} {x["access"]}')
-            number=prompt('Nummer (Enter=ingen)')
+        if net['hosts'] and confirm(tr('Ta bort någon befintlig värdregel?','Remove an existing host rule?'),False):
+            for i,x in enumerate(net['hosts'],1):say(f'{i}) {x.get("scheme","https")}://{x["host"]} {action_label(x["access"])}')
+            number=prompt(tr('Nummer (Enter=ingen)','Number (Enter=none)'))
             if number.isdigit() and 1<=int(number)<=len(net['hosts']):net['hosts'].pop(int(number)-1)
     validate(access)
-    say('OBS: denna fil är en beteendepolicy; utan OS-sandbox kan shellkommandon kringgå den.')
-    if not confirm('Spara dessa åtkomstregler?',False): raise RuntimeError('Åtkomstguiden avbruten')
+    say(tr('OBS: denna fil är en beteendepolicy; utan OS-sandbox kan shellkommandon kringgå den.','NOTE: this file is a behavioral policy; without an OS sandbox shell commands can bypass it.'))
+    if not confirm(tr('Spara dessa åtkomstregler?','Save these access rules?'),False): raise RuntimeError(tr('Åtkomstguiden avbruten','Access wizard cancelled'))
     return access
+
+def path_patterns(path):
+    """Best-effort native + forward-slash spellings; no new permission schema."""
+    path = str(path).rstrip('/\\')
+    variants = [path]
+    if re.match(r'^[A-Za-z]:', path) or path.startswith(('\\\\', '//')):
+        variants += [path.replace('\\', '/'), path.replace('/', '\\')]
+    return list(dict.fromkeys(pat for p in variants for pat in
+                             (p, p + ('\\*' if '\\' in p else '/*'),
+                              p + ('\\**' if '\\' in p else '/**'))))
+
 
 def make_permission(v, access=None):
     # V1 OpenCode has `permission` singular; last matching pattern wins.
@@ -368,25 +423,28 @@ def make_permission(v, access=None):
     edit={'*':v.get('file_edit','allow')}
     ext={'*': 'allow' if 'allow' in (v['outside_read'],v['outside_write']) else ('ask' if 'ask' in (v['outside_read'],v['outside_write']) else 'deny')}
     # Read/edit absolute path match complements external_directory.
-    read['/*']=v['outside_read']; edit['/*']=v['outside_write']
+    # OpenCode wildcard matching is not a shell glob: avoid character classes
+    # such as [A-Za-z], which some versions treat as literal text.
+    absolute_patterns = ('/*', '*:/*', '*:\\*', '//*/**', '\\\\*')
+    for pat in absolute_patterns:
+        read[pat]=v['outside_read']; edit[pat]=v['outside_write']
     for m in v.get('mounts',[]):
-        path=m['path'].rstrip('/')
-        ext[path+'/*']='allow' if 'allow' in (m['read'],m['write']) else ('ask' if 'ask' in (m['read'],m['write']) else 'deny')
-        read[path+'/*']=m['read']; edit[path+'/*']=m['write']
+        for pat in path_patterns(m['path']):
+            ext[pat]='allow' if 'allow' in (m['read'],m['write']) else ('ask' if 'ask' in (m['read'],m['write']) else 'deny')
+            read[pat]=m['read']; edit[pat]=m['write']
     if access:
         # Native OpenCode v1.x external-directory and read/edit guards are best effort.
         fs=access['filesystem']; net=access['network']
         ext['*']='allow' if 'allow' in fs['default_outside'].values() else ('ask' if 'ask' in fs['default_outside'].values() else 'deny')
-        read['/*']=fs['default_outside']['read']
-        edit['/*']=fs['default_outside']['write']
+        for pat in absolute_patterns:
+            read[pat]=fs['default_outside']['read']
+            edit[pat]=fs['default_outside']['write']
         # Explicit project-root exception avoids rejecting absolute paths within the worktree.
-        root=access['project_root'].rstrip('/')
-        for pat in (root, root+'/**'):
+        for pat in path_patterns(access['project_root']):
             read[pat]='allow'
             edit[pat]=v.get('file_edit','allow')
-        for r in sorted(fs.get('paths',[]),key=lambda x:len(Path(x['path']).parts)):
-            path=r['path'].rstrip('/')
-            for pat in (path, path+'/**'):
+        for r in sorted(fs.get('paths',[]),key=lambda x:len(re.split(r'[/\\]+',x['path']))):
+            for pat in path_patterns(r['path']):
                 ext[pat]='allow' if 'allow' in (r['read'],r['write']) else ('ask' if 'ask' in (r['read'],r['write']) else 'deny')
                 read[pat]=r['read']; edit[pat]=r['write']
         # OpenCode v1.x cannot implement webfetch host allowlists. Avoid unintentionally broad allow.
@@ -395,10 +453,13 @@ def make_permission(v, access=None):
     # Never let the agent rewrite its own access policy via direct edit tools.
     if access and any(r['access']=='allow' and r.get('scheme','https') in ('https','http') for r in access['network'].get('hosts',[])):
         shell['python3 .opencode/tools/access_fetch.py *']='allow'
+        if os.name == 'nt':
+            shell['python .opencode/tools/access_fetch.py *']='allow'
     for pat in (ACCESS_FILE, ACCESS_RULES, '.opencode/tools/access_check.py', '.opencode/tools/access_fetch.py'):
         edit[pat]='deny'
         if access:
-            edit[str(Path(access['project_root'])/pat)]='deny'
+            for absolute in path_patterns(access['project_root'].rstrip('/\\')+'/'+pat):
+                edit[absolute]='deny'
     # Secrets patterns after generic catchalls. Some paths/aliases may evade these globs.
     for pat in ['*.env','*.env.*','*.pem','*.key','*id_rsa*','*id_ed25519*','*credentials*','*secrets*']:
         read[pat]=v['secrets']; edit[pat]='deny' if v['secrets']!='allow' else 'ask'
@@ -433,18 +494,18 @@ def update_agents_md(project, selected, mode):
         text=text.replace(old_template.strip(),new,1)
     else:
         if '# Project AI team instructions' in text:
-            say('VARNING: AGENTS.md har äldre agentteam-regler som inte kunde identifieras exakt. Kontrollera konflikter manuellt.')
+            say(tr('VARNING: AGENTS.md har äldre agentteam-regler som inte kunde identifieras exakt. Kontrollera konflikter manuellt.','WARNING: AGENTS.md contains older team rules that could not be identified exactly. Check for conflicts manually.'))
         text=text.rstrip()+'\n\n'+new+'\n'
     write_text(file,text)
 
 def apply(project, selected, models, perm, mode, approved_remote=None, access=None):
-    if not project.is_dir(): raise RuntimeError('Projektkatalogen finns inte')
+    if not project.is_dir(): raise RuntimeError(tr('Projektkatalogen finns inte','Project directory does not exist'))
     existing=json_load(project/'opencode.json')
     if access is None:
         access=load_policy(project/ACCESS_FILE) if (project/ACCESS_FILE).exists() else default_access_policy(project,perm)
     validate(access)
     if Path(access['project_root']).resolve()!=project.resolve():
-        raise RuntimeError('Åtkomstpolicyn tillhör ett annat projekt; ändra project_root efter flytt.')
+        raise RuntimeError(tr('Åtkomstpolicyn tillhör ett annat projekt; ändra project_root efter flytt.','Access policy belongs to another project; update project_root after moving it.'))
     manifest=read_manifest(project)
     old_managed=set(manifest.get('installed_agents',[]))
     known=set(profiles())
@@ -462,7 +523,7 @@ def apply(project, selected, models, perm, mode, approved_remote=None, access=No
     cfg=existing
     cfg.setdefault('$schema','https://opencode.ai/config.json')
     a=cfg.get('agent') or {}
-    if not isinstance(a,dict): raise RuntimeError('opencode.json agent måste vara ett objekt')
+    if not isinstance(a,dict): raise RuntimeError(tr('opencode.json agent måste vara ett objekt','opencode.json agent must be an object'))
     for name in old_managed-set(selected):
         a.pop(name,None)
     for name in selected:
@@ -485,7 +546,7 @@ def apply(project, selected, models, perm, mode, approved_remote=None, access=No
             if first: cfg['model']=first
     cfg['permission']=make_permission({**perm,'_selected_agents':selected},access)
     instructions=cfg.get('instructions',[])
-    if not isinstance(instructions,list):raise RuntimeError('opencode.json instructions måste vara en lista')
+    if not isinstance(instructions,list):raise RuntimeError(tr('opencode.json instructions måste vara en lista','opencode.json instructions must be a list'))
     if ACCESS_RULES not in instructions:instructions.append(ACCESS_RULES)
     cfg['instructions']=instructions
     provider_ids=sorted({m.split('/')[0] for m in models.values() if m})
@@ -521,33 +582,33 @@ def apply(project, selected, models, perm, mode, approved_remote=None, access=No
        '- A confidential project requires verified local inference and OS isolation where appropriate.\n'
        '- Substantial architecture changes and large resource increases require user authorization.\n')
     write_text(project/'PROJECT_POLICY.md',policy)
-    say(f'\nKlart: {len(selected)} agenter installerade i {project}.')
-    say('Projektets konfiguration och tidigare filer har säkerhetskopierats vid ändring.')
-    say('OBS: eventuella .opencode/agent-filer/andra överordnade globala regler kontrolleras separat av OpenCode.')
+    say(tr('\nKlart: {count} agenter installerade i {project}.','\nDone: {count} agents installed in {project}.').format(count=len(selected),project=project))
+    say(tr('Projektets konfiguration och tidigare filer har säkerhetskopierats vid ändring.','Project configuration and previous files were backed up when changed.'))
+    say(tr('OBS: eventuella .opencode/agent-filer/andra överordnade globala regler kontrolleras separat av OpenCode.','NOTE: any .opencode/agent files or other overriding global rules are handled separately by OpenCode.'))
 
 def configure(project, mode='full'):
     if not project.exists():
-        if confirm(f'Skapa projektkatalog {project}?',False): project.mkdir(parents=True)
-        else: raise RuntimeError('Projektet finns inte')
+        if confirm(tr('Skapa projektkatalog {project}?','Create project directory {project}?').format(project=project),False): project.mkdir(parents=True)
+        else: raise RuntimeError(tr('Projektet finns inte','Project does not exist'))
     git=project/'.git'
     if not git.exists() and mode=='full':
-        if confirm('Projektet saknar Git-repo. Initiera med git init?',True):
+        if confirm(tr('Projektet saknar Git-repo. Initiera med git init?','Project has no Git repository. Initialize with git init?'),True):
             subprocess.run(['git','init',str(project)],check=True)
     manifest=read_manifest(project)
     old=manifest.get('installed_agents',[])
     available=profiles()
     selected=select_agents(available,old) if mode in ('full','agents') else list(old)
-    if not selected: raise RuntimeError('Projektet saknar ett registrerat team. Välj Installera först.')
+    if not selected: raise RuntimeError(tr('Projektet saknar ett registrerat team. Välj Installera först.','Project has no registered team. Choose Install first.'))
     cfg=json_load(project/'opencode.json')
     oldmodels={n:(cfg.get('agent',{}).get(n,{}) or {}).get('model') for n in selected}
     existing_models=manifest.get('models',{})
     oldmodels={n:(oldmodels.get(n) or existing_models.get(n)) for n in selected}
     models=oldmodels
     if mode in ('full','models','agents'):
-        if not confirm('Kör opencode models och välj modell för varje vald agent?',True):
-            raise RuntimeError('Modellval krävs för nya installationer. Avbrutet.')
-        say('OpenCode kan hämta katalogen över nätverket. Enbart denna begäran om modellista görs av verktyget.')
-        if not confirm('Tillåt opencode models nu?',True): raise RuntimeError('Modellista ej godkänd')
+        if not confirm(tr('Kör opencode models och välj modell för varje vald agent?','Run opencode models and choose a model for each selected agent?'),True):
+            raise RuntimeError(tr('Modellval krävs för nya installationer. Avbrutet.','Model selection is required for new installations. Cancelled.'))
+        say(tr('OpenCode kan hämta katalogen över nätverket. Enbart denna begäran om modellista görs av verktyget.','OpenCode may fetch the catalog over the network. This tool makes only this model-list request.'))
+        if not confirm(tr('Tillåt opencode models nu?','Allow opencode models now?'),True): raise RuntimeError(tr('Modellista ej godkänd','Model list not approved'))
         models=assign_models(selected,list_models(project),oldmodels)
     if mode in ('full','permissions'):
         classif=choose_mode() if mode=='full' else manifest.get('mode','PRIVATE')
@@ -556,28 +617,28 @@ def configure(project, mode='full'):
         classif=manifest.get('mode','PRIVATE')
         perms=manifest.get('permissions') or permission_wizard()
     if classif=='PRIVATE':
-        say('PRIVATE: verktyget kan inte bevisa att valda modeller körs lokalt.')
-        if mode in ('models','agents') and not confirm('Bekräftar du att samtliga nu valda modeller verkligen körs lokalt och inte skickar data till molnet?',False):
-            raise RuntimeError('Modelländringen i PRIVATE avbruten')
+        say(tr('PRIVATE: verktyget kan inte bevisa att valda modeller körs lokalt.','PRIVATE: this tool cannot prove that selected models run locally.'))
+        if mode in ('models','agents') and not confirm(tr('Bekräftar du att samtliga nu valda modeller verkligen körs lokalt och inte skickar data till molnet?','Do you confirm that all currently selected models run locally and do not send data to the cloud?'),False):
+            raise RuntimeError(tr('Modelländringen i PRIVATE avbruten','PRIVATE model change cancelled'))
     access=load_policy(project/ACCESS_FILE) if (project/ACCESS_FILE).exists() else default_access_policy(project,perms)
-    if mode in ('full','permissions') and confirm('Redigera whitelist/blacklist för kataloger och internet nu?',False):
+    if mode in ('full','permissions') and confirm(tr('Redigera whitelist/blacklist för kataloger och internet nu?','Edit directory and internet allowlists/denylists now?'),False):
         access=access_wizard(project,access)
-    say('\n=== Sammanfattning ===')
-    say(f'Projekt: {project}; Agenter: {len(selected)}; Sekretess: {classif}; Shell: {perms["shell"]}; Push: {perms["gitpush"]}; Internet: {perms["internet"]}')
-    for n in selected: say(f'  {n:27} {models.get(n) or "INHERIT"}')
-    if not confirm('Spara projektkonfiguration och profiler?',False): return
+    say(tr('\n=== Sammanfattning ===','\n=== Summary ==='))
+    say(tr('Projekt: {project}; Agenter: {count}; Sekretess: {mode}; Shell: {shell}; Push: {push}; Internet: {internet}','Project: {project}; Agents: {count}; Classification: {mode}; Shell: {shell}; Push: {push}; Internet: {internet}').format(project=project,count=len(selected),mode=classif,shell=action_label(perms['shell']),push=action_label(perms['gitpush']),internet=action_label(perms['internet'])))
+    for n in selected: say(f'  {n:27} {models.get(n) or tr("ÄRV", "INHERIT")}')
+    if not confirm(tr('Spara projektkonfiguration och profiler?','Save project configuration and profiles?'),False): return
     apply(project,selected,models,perms,classif,access=access)
 
 def sync_access(project):
-    if not read_manifest(project):raise RuntimeError('Installera agentteamet i projektet först.')
+    if not read_manifest(project):raise RuntimeError(tr('Installera agentteamet i projektet först.','Install the agent team in the project first.'))
     access=load_policy(project/ACCESS_FILE)
     if Path(access['project_root']).resolve()!=project.resolve():
-        raise RuntimeError('project_root i policyn överensstämmer inte med projektkatalogen')
+        raise RuntimeError(tr('project_root i policyn överensstämmer inte med projektkatalogen','Policy project_root does not match the project directory'))
     cfg=json_load(project/'opencode.json')
     manifest=read_manifest(project)
     cfg['permission']=make_permission({**manifest.get('permissions',{}),'_selected_agents':manifest.get('installed_agents',[])},access)
     ins=cfg.get('instructions',[])
-    if not isinstance(ins,list):raise RuntimeError('instructions måste vara en lista')
+    if not isinstance(ins,list):raise RuntimeError(tr('instructions måste vara en lista','instructions must be a list'))
     if ACCESS_RULES not in ins:ins.append(ACCESS_RULES)
     cfg['instructions']=ins
     write_text(project/ACCESS_RULES,render_access_rules(access))
@@ -585,12 +646,12 @@ def sync_access(project):
     write_text(project/'.opencode/tools/access_check.py',(ROOT/'access_check.py').read_text(encoding='utf-8'))
     write_text(project/'.opencode/tools/access_fetch.py',(ROOT/'access_fetch.py').read_text(encoding='utf-8'))
     write_json(project/'opencode.json',cfg)
-    say('Policy synkroniserad. Starta om OpenCode för att läsa in nya regler.')
+    say(tr('Policy synkroniserad. Starta om OpenCode för att läsa in nya regler.','Policy synchronized. Restart OpenCode to load the new rules.'))
 
 
 def configure_access(project):
     manifest=read_manifest(project)
-    if not manifest:raise RuntimeError('Installera agentteamet i projektet först.')
+    if not manifest:raise RuntimeError(tr('Installera agentteamet i projektet först.','Install the agent team in the project first.'))
     current=load_policy(project/ACCESS_FILE) if (project/ACCESS_FILE).exists() else default_access_policy(project,manifest.get('permissions',{}))
     new=access_wizard(project,current)
     cfg=json_load(project/'opencode.json')
@@ -604,73 +665,78 @@ def configure_access(project):
     write_text(project/'.opencode/tools/access_check.py',(ROOT/'access_check.py').read_text(encoding='utf-8'))
     write_text(project/'.opencode/tools/access_fetch.py',(ROOT/'access_fetch.py').read_text(encoding='utf-8'))
     write_json(project/'opencode.json',cfg)
-    say('Åtkomstpolicyn är uppdaterad. Starta om OpenCode för att ladda nya instruktioner och behörigheter.')
+    say(tr('Åtkomstpolicyn är uppdaterad. Starta om OpenCode för att ladda nya instruktioner och behörigheter.','Access policy updated. Restart OpenCode to load new instructions and permissions.'))
 
 
 def create_agent():
-    say('\n=== Skapa ny återanvändbar agentprofil ===')
-    slug=prompt('Agentnamn (ex. mechanical-engineer)')
+    say(tr('\n=== Skapa ny återanvändbar agentprofil ===','\n=== Create a reusable agent profile ==='))
+    slug=prompt(tr('Agentnamn (ex. mechanical-engineer)','Agent name (e.g. mechanical-engineer)'))
     if not re.fullmatch(r'[a-z][a-z0-9-]{2,54}',slug):
-        raise RuntimeError('Namnet måste vara gemener, siffror eller bindestreck och minst 3 tecken.')
+        raise RuntimeError(tr('Namnet måste vara gemener, siffror eller bindestreck och minst 3 tecken.','Name must start with a lowercase letter, use lowercase letters, digits or hyphens, and be 3–55 characters.'))
     if (PROFILES/(slug+'.md')).exists() or (CUSTOM/(slug+'.md')).exists():
-        raise RuntimeError('Agenten finns redan. Redigera dess fil manuellt i custom-profiles.')
-    desc=prompt('Beskrivning (på engelska)')
-    if not desc: raise RuntimeError('Beskrivning krävs')
-    say('Skriv instruktioner på engelska, avsluta med en ensam punkt på en rad.')
+        raise RuntimeError(tr('Agenten finns redan. Redigera dess fil manuellt i custom-profiles.','Agent already exists. Edit its file manually in custom-profiles.'))
+    desc=prompt(tr('Beskrivning (på engelska)','Description (in English)'))
+    if not desc: raise RuntimeError(tr('Beskrivning krävs','Description is required'))
+    say(tr('Skriv instruktioner på engelska, avsluta med en ensam punkt på en rad.','Write instructions in English; finish with a single dot on a line.'))
     lines=[]
     while True:
         line=input()
         if line.strip()=='.': break
         lines.append(line)
-    if not lines: raise RuntimeError('Agentinstruktioner krävs')
+    if not lines: raise RuntimeError(tr('Agentinstruktioner krävs','Agent instructions are required'))
     CUSTOM.mkdir(parents=True,exist_ok=True)
     profile=(f'---\ndescription: {json.dumps(desc,ensure_ascii=False)}\nmode: subagent\n---\n\n'
       '# '+slug+'\n\n'+'\n'.join(lines)+'\n\n'
       'Follow the project-wide team rules. Admit uncertainty, request suitable expertise, and keep handoffs concise.\n')
     write_text(CUSTOM/(slug+'.md'),profile)
-    say(f'Agenten sparad centralt: {CUSTOM/(slug+".md")}')
-    say('Välj nu Installera/Uppdatera i projektet för att inkludera den och välja en modell.')
+    say(tr('Agenten sparad centralt: {path}','Agent saved centrally: {path}').format(path=CUSTOM/(slug+'.md')))
+    say(tr('Välj nu Installera/Uppdatera i projektet för att inkludera den och välja en modell.','Now choose Install/Update in the project to include it and select a model.'))
 
 def status(project):
     info=read_manifest(project)
     if not info:
-        say('Ingen v2-manifest hittad. Använd Installera för att migrera ett äldre projekt.'); return
-    say(f'Åtkomstpolicy: {project/ACCESS_FILE} (INTE en sandbox)')
-    say(f'Projekt: {project}\nInstallerat: {info.get("version")}\nKlassning: {info.get("mode")}\nAgenter ({len(info.get("installed_agents",[]))}):')
+        say(tr('Ingen v2-manifest hittad. Använd Installera för att migrera ett äldre projekt.','No v2 manifest found. Use Install to migrate an older project.')); return
+    say(tr('Åtkomstpolicy: {path} (INTE en sandbox)','Access policy: {path} (NOT a sandbox)').format(path=project/ACCESS_FILE))
+    say(tr('Projekt: {project}\nInstallerat: {version}\nKlassning: {mode}\nAgenter ({count}):','Project: {project}\nInstalled: {version}\nClassification: {mode}\nAgents ({count}):').format(project=project,version=info.get('version'),mode=info.get('mode'),count=len(info.get('installed_agents',[]))))
     for n in info.get('installed_agents',[]):
-        say(f'  {n:27} {info.get("models",{}).get(n) or "inherit"}')
+        say(f'  {n:27} {info.get("models",{}).get(n) or tr("ärv", "inherit")}')
     v=info.get('permissions',{})
-    for name in ('shell','file_edit','gitpush','internet','outside_read','outside_write','sudo','destructive','secrets','mcp','packages','hardware','unattended'):
-        say(f'  {name:15}: {v.get(name)}')
+    labels = [('shell',tr('shell','shell')),('file_edit',tr('filredigering','file editing')),
+              ('gitpush',tr('git push','git push')),('internet',tr('internet','internet')),
+              ('outside_read',tr('läsa utanför','outside read')),('outside_write',tr('skriva utanför','outside write')),
+              ('sudo',tr('privilegierat','privileged')),('destructive',tr('destruktivt','destructive')),
+              ('secrets',tr('hemligheter','secrets')),('mcp','MCP'),('packages',tr('paket','packages')),
+              ('hardware',tr('hårdvara','hardware')),('unattended',tr('obevakat','unattended'))]
+    for name,label in labels:
+        say(f'  {label:15}: {action_label(v.get(name))}')
 
 def run_opencode(project, resume=False):
-    if not shutil.which('opencode'): raise RuntimeError('opencode saknas i PATH')
     info=read_manifest(project)
-    cmd=['opencode']
-    if resume: cmd.append('--continue')
+    args=[]
+    if resume: args.append('--continue')
     if info.get('permissions',{}).get('unattended'):
-        say('VARNING: --auto godkänner ASK-regler. Uttryckliga DENY gäller fortfarande; shell är inte sandbox.')
-        cmd.append('--auto')
-    say('Startar: '+' '.join(cmd))
-    os.chdir(project)
-    os.execvp(cmd[0],cmd)
+        say(tr('VARNING: --auto godkänner ASK-regler. Uttryckliga DENY gäller fortfarande; shell är inte sandbox.','WARNING: --auto approves ASK rules. Explicit DENY still applies; shell is not a sandbox.'))
+        args.append('--auto')
+    cmd=opencode_command(args)
+    say(tr('Startar: ','Starting: ')+(cmd if isinstance(cmd,str) else ' '.join(cmd)))
+    return subprocess.run(cmd,cwd=project).returncode
 
 def menu():
     while True:
         say('\n=== agents-opencode v'+VERSION+' ===')
-        say(' 1) Installera / konfigurera ett projekt (välj agenter + modeller + behörigheter)')
-        say(' 2) Ändra alla agentmodeller från hela opencode models-listan')
-        say(' 3) Välj / ta bort agenter i projektet')
-        say(' 4) Ändra projektets behörighetsguide')
-        say(' 5) Visa projektstatus')
-        say(' 6) Skapa en ny agentprofil (återanvändbar)')
-        say(' 7) Starta OpenCode')
-        say(' 8) Fortsätt senaste OpenCode-session')
-        say(' 9) Lista tillgängliga modeller')
-        say('10) Redigera fil- och nätverkslistor (whitelist/blacklist)')
-        say('11) Synkronisera manuellt redigerad access-policy')
-        say(' 0) Avsluta')
-        n=prompt('Välj','0')
+        say(tr(' 1) Installera / konfigurera ett projekt (välj agenter + modeller + behörigheter)',' 1) Install / configure a project (choose agents + models + permissions)'))
+        say(tr(' 2) Ändra alla agentmodeller från hela opencode models-listan',' 2) Change all agent models using the full opencode models list'))
+        say(tr(' 3) Välj / ta bort agenter i projektet',' 3) Select / remove project agents'))
+        say(tr(' 4) Ändra projektets behörighetsguide',' 4) Change project permissions'))
+        say(tr(' 5) Visa projektstatus',' 5) Show project status'))
+        say(tr(' 6) Skapa en ny agentprofil (återanvändbar)',' 6) Create a reusable agent profile'))
+        say(tr(' 7) Starta OpenCode',' 7) Start OpenCode'))
+        say(tr(' 8) Fortsätt senaste OpenCode-session',' 8) Resume latest OpenCode session'))
+        say(tr(' 9) Lista tillgängliga modeller',' 9) List available models'))
+        say(tr('10) Redigera fil- och nätverkslistor (whitelist/blacklist)','10) Edit file and network allowlists/denylists'))
+        say(tr('11) Synkronisera manuellt redigerad access-policy','11) Synchronize manually edited access policy'))
+        say(tr(' 0) Avsluta',' 0) Exit'))
+        n=prompt(tr('Välj','Choose'),'0')
         if n=='0': return
         try:
             if n=='6': create_agent(); continue
@@ -680,25 +746,48 @@ def menu():
             elif n=='3': configure(project,'agents')
             elif n=='4': configure(project,'permissions')
             elif n=='5': status(project)
-            elif n=='7': run_opencode(project)
-            elif n=='8': run_opencode(project,True)
+            elif n=='7': return run_opencode(project)
+            elif n=='8': return run_opencode(project,True)
             elif n=='10':configure_access(project)
             elif n=='11':sync_access(project)
             elif n=='9':
-                if confirm('Tillåt opencode models (kan kontakta modellkatalogen)?',False):
+                if confirm(tr('Tillåt opencode models (kan kontakta modellkatalogen)?','Allow opencode models (may contact the model catalog)?'),False):
                     for m in list_models(project): say(m)
-        except (RuntimeError,ValueError,EOFError,KeyboardInterrupt,subprocess.SubprocessError) as e:
-            say('\nFel/avbrutet: '+str(e))
+            else: say(tr('Ogiltigt val.','Invalid choice.'))
+        except (RuntimeError,ValueError,OSError,EOFError,KeyboardInterrupt,subprocess.SubprocessError) as e:
+            say(tr('\nFel/avbrutet: ','\nError/cancelled: ')+str(e))
 
-def main():
-    args=sys.argv[1:]
+def main(argv=None):
+    args=list(sys.argv[1:] if argv is None else argv)
+    # --lang is global, including after a command/project. No language prompt
+    # for help/version, even if attached to an otherwise interactive command.
+    set_language('en')
+    explicit=None
+    positional=[]
+    i=0
+    while i<len(args):
+        arg=args[i]
+        if arg=='--lang' or arg.startswith('--lang='):
+            if arg=='--lang':
+                i+=1
+                if i==len(args): raise RuntimeError('--lang requires sv or en / --lang kräver sv eller en')
+                lang=args[i]
+            else: lang=arg.split('=',1)[1]
+            set_language(lang)
+            explicit=lang
+        else: positional.append(arg)
+        i+=1
+    args=positional
+    if any(a in ('--help','help','-h') for a in args):
+        say('agents-opencode [--lang sv|en] [install|models-all|agents|permissions|access|sync-access|status|add-agent|run|resume|list-models] [PROJECT_PATH]')
+        say(tr('Installation: python install.py (användarnivå). Ingen modell är förvald.','Installation: python install.py (user-level). No model is preselected.'))
+        say(tr('--lang sv|en kan placeras före eller efter kommandot. Utan flaggan väljs språk vid interaktiv start; annars används engelska.','--lang sv|en may appear before or after the command. Without it, interactive startup asks for a language; otherwise English is used.'))
+        return 0
+    if any(a in ('--version','-V') for a in args): say(VERSION); return 0
+    select_language(explicit)
     if not args: return menu()
     cmd=args[0]
-    if cmd in ('--help','help','-h'):
-        say('agents-opencode [install|models-all|agents|permissions|access|sync-access|status|add-agent|run|resume|list-models] [PROJECT_PATH]')
-        say('Installation: bash install.sh (användarnivå, ~/.local/bin). Ingen modell är förvald.')
-        return
-    if cmd in ('--version','-V'): say(VERSION); return
+    if len(args)>2: raise RuntimeError(tr('För många argument. agents-opencode --help','Too many arguments. agents-opencode --help'))
     if cmd=='add-agent': create_agent(); return
     project=Path(args[1]).expanduser().resolve() if len(args)>1 else Path.cwd().resolve()
     if cmd in ('install','init'): configure(project,'full')
@@ -708,14 +797,14 @@ def main():
     elif cmd=='access': configure_access(project)
     elif cmd=='sync-access': sync_access(project)
     elif cmd=='status': status(project)
-    elif cmd=='run': run_opencode(project)
-    elif cmd=='resume': run_opencode(project,True)
+    elif cmd=='run': return run_opencode(project)
+    elif cmd=='resume': return run_opencode(project,True)
     elif cmd=='list-models':
-        if confirm('Tillåt opencode models (kan kontakta modellkatalogen)?',False):
+        if confirm(tr('Tillåt opencode models (kan kontakta modellkatalogen)?','Allow opencode models (may contact the model catalog)?'),False):
             for x in list_models(project): say(x)
-    else: raise RuntimeError('Okänt kommando. agents-opencode --help')
+    else: raise RuntimeError(tr('Okänt kommando. agents-opencode --help','Unknown command. agents-opencode --help'))
 
 if __name__=='__main__':
-    try: main()
-    except (RuntimeError,KeyboardInterrupt,EOFError) as ex:
-        print('ERROR: '+str(ex),file=sys.stderr); sys.exit(1)
+    try: sys.exit(main())
+    except (RuntimeError,ValueError,OSError,subprocess.SubprocessError,KeyboardInterrupt,EOFError) as ex:
+        print(tr('FEL: ','ERROR: ')+str(ex),file=sys.stderr); sys.exit(1)

@@ -4,3 +4,15 @@ __pycache__/
 .venv/
 *.zip
 *.log
+
+# Local installation in this development repository (sources live in lib/).
+/.opencode/
+/AGENTS.md
+/PROJECT_POLICY.md
+/AGENT_ACCESS_POLICY.json
+/opencode.json
+/opencode.jsonc
+*.backup-agentteam-*
+
+# Local working records, never distribution sources.
+/.local-work/
