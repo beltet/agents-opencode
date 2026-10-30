@@ -1,45 +1,53 @@
-# OpenCode Agentteam — portable installer v2.1.0
+# OpenCode Agentteam
 
-A portable installer and manager for an engineering-agent team for **OpenCode 1.x** (designed for v1.19.5). It includes 23 specialist profiles and shared team instructions in English. The manager offers Swedish and English UI. No model IDs, API keys, providers, or user-specific paths are preconfigured; each user selects models and permissions.
+**Ett AI-team för dina projekt i OpenCode — med guider för Windows och Linux.**
 
-## Quick start
+Verktyget hjälper dig att välja AI-assistenter med olika uppgifter, till exempel planering, programmering och granskning. Du behöver inte använda alla 23 specialister.
 
-### Windows (native)
+## Börja här / Start here
 
-Requirements: Windows, Python 3.10 or later, Git, and OpenCode installed and configured separately. The installer itself is native Python and does not require Bash, administrator rights, Python packages, or a network connection. OpenCode has its own platform requirements; on Windows it may require Git Bash. Check OpenCode's own requirements—this installer does not install or validate Git Bash.
+**Ny användare? Följ guiden från början. Du behöver inte kunna Git-kommandon för att hämta paketet.**
 
-1. Download the **complete source archive** from GitHub using **Code → Download ZIP**. There is no separate release binary. Extract the complete archive; do not copy only the launcher or installer.
-2. In Command Prompt, open the extracted folder and run:
+| Språk / Language | Steg-för-steg / Step by step |
+| --- | --- |
+| **Svenska** | **[Börja här: hämta, installera och använd](START_HAR.md)** |
+| **English** | **[Start here: download, install, and use](START_HERE.md)** |
 
-   ```text
-   install.cmd
-   ```
+Guiderna visar vad du ska klicka på på GitHub, hur du packar upp filen, hur du öppnar ett kommandofönster och vilka kommandon du ska skriva. Både Windows och Linux finns med.
 
-   In PowerShell, use `Set-Location` to enter the extracted folder, then run `.\install.cmd` or `.\install.cmd --lang en` / `.\install.cmd --lang sv`.
-    The installer asks for language first (Swedish or English; Enter selects English). Windows installation adds the installed launcher directory to the current user's PATH by default; use `install.cmd --no-path` to opt out.
-3. In Command Prompt, start `agents-opencode.cmd` from the extracted folder, or use the installed launcher:
+### Så går det till
 
-   ```text
-   "%LOCALAPPDATA%\agents-opencode\bin\agents-opencode.cmd"
-   ```
+1. **Förbered datorn.** Installera Python och OpenCode separat och anslut OpenCode till en AI-modell. Guiderna länkar till respektive installationsanvisning. Modellanvändning kan kosta pengar.
+2. **Hämta paketet här på GitHub.** Gå till fliken **Code**, klicka på den gröna knappen **Code** och välj **Download ZIP**. Packa upp hela ZIP-filen innan du fortsätter.
+3. **Installera verktyget en gång.** Öppna den uppackade mappen som innehåller `install.cmd` och `install.sh`. Följ installationsstegen för ditt operativsystem i guiden.
+4. **Välj ditt projekt.** Öppna mappen med det du vill arbeta med — inte den uppackade installationsmappen. Guiden visar också hur du skapar en tom övningsmapp.
+5. **Ställ in teamet.** Välj assistenter, AI-modeller och vad de får göra. Börja försiktigt; godkänn inte alla standardval utan att läsa dem.
+6. **Starta och skriv din uppgift.** Be först teamet att läsa och förklara projektet utan att ändra något. Guiderna innehåller en färdig exempeluppgift.
 
-   In PowerShell, use `& "$env:LOCALAPPDATA\agents-opencode\bin\agents-opencode.cmd"`.
-    By default, the Windows installer registers `%LOCALAPPDATA%\agents-opencode\bin` in the current user's PATH via the per-user Windows environment setting (HKCU); it requires no administrator rights, preserves existing PATH entries, and avoids adding a duplicate. Use `install.cmd --no-path` to skip PATH registration. If registration fails, the installer reports an actionable error; the launcher remains installed and runnable by its full path as shown above.
+**Viktigt:** Det här paketet installerar agentteamet, **inte OpenCode eller AI-modellerna**. Installationsmappen och din projektmapp är två olika saker. Börja med [den svenska guiden](START_HAR.md) om du är osäker.
 
-    PATH changes apply to newly started processes, not terminals already open. Open a new terminal; if Windows Terminal or an IDE still has a stale environment, fully restart that parent application or sign out and back in. A child process such as Python cannot change the environment of its parent terminal.
-4. In a project folder, start the installed launcher by its full path as shown above, or use `agents-opencode.cmd` if its `bin` directory is on PATH. Choose **1** to configure the project. Append `--lang en` or `--lang sv` to select a language directly. Without the flag, the manager asks for language first on interactive startup; Enter defaults to English. In noninteractive use, the default is English.
+### English overview
 
-OpenCode and its model providers must be installed/configured separately; the manager uses `opencode models` when you configure a project. The manager's installer does not download software or contact a network. If OpenCode's Windows runtime needs Git Bash, that is an OpenCode runtime requirement, not a requirement to run `install.cmd`.
+This tool adds an AI engineering team to an **existing OpenCode installation**. Follow the **[English beginner guide](START_HERE.md)** for Windows or Linux: prepare your computer → download the GitHub ZIP → extract it → install the tool once → configure your own project → start OpenCode and enter your first task. No Git commands are needed to download the ZIP. OpenCode, Python, model accounts, and authentication are set up separately; model use may incur charges.
 
-### Linux
+---
 
-Requirements: Bash, Python 3.10 or later (standard library only), Git, and OpenCode installed/configured separately. Extract the complete archive, then run:
+## Technical reference / Teknisk referens
 
-```bash
-bash install.sh
-```
+**The sections below are reference material, not extra steps required before following the beginner guide.**
 
-The user launcher is `~/.local/bin/agents-opencode`; central files are in `${XDG_DATA_HOME:-~/.local/share}/agents-opencode/`. The command directory may need to be added to PATH manually. No root privileges or Python packages are required.
+Portable installer v2.1.0 targets **OpenCode 1.x** (designed for v1.19.5). It includes 23 specialist profiles and shared team instructions in English; the manager UI is available in Swedish and English. No model IDs, API keys, providers, or user-specific paths are preconfigured.
+
+### Installation reference
+
+From the extracted package folder, run `.\install.cmd` in Windows PowerShell or `bash install.sh` on Linux. Choose Swedish or English when prompted, or append `--lang sv` / `--lang en`. The installer uses Python 3.10+ and its standard library; no administrator/root privileges, Python packages, or network connection are needed for this copy step. Linux requires Bash. OpenCode has its own requirements; this installer does not install or validate Git Bash for Windows.
+
+- **Windows:** the default launcher is `%LOCALAPPDATA%\agents-opencode\bin\agents-opencode.cmd`. Installation adds its directory to the current user's PATH, preserving existing entries and avoiding duplicates. Append `--no-path` to opt out. Open a new terminal afterwards; restart Windows Terminal/your IDE if necessary. If PATH registration fails, the installed launcher can still be used. In PowerShell: `& "$env:LOCALAPPDATA\agents-opencode\bin\agents-opencode.cmd" install --lang en`.
+- **Linux:** the default launcher is `~/.local/bin/agents-opencode`; central files are under `${XDG_DATA_HOME:-$HOME/.local/share}/agents-opencode/`. `XDG_BIN_HOME` can override the launcher directory. The installer **does not update PATH**. Use `"$HOME/.local/bin/agents-opencode" install --lang en` with the default location, or add the command directory to PATH yourself.
+
+Run project configuration from your **own project folder**, then use `agents-opencode run` to start OpenCode there. If the command is not on PATH, use the full launcher path above for `run`, `resume`, and other commands too. If selected, orchestrator is the default agent; no extra activation command is needed. Restart OpenCode after configuration changes.
+
+Git is useful for project version history and is required if you accept the wizard's offer to run `git init`; it is not needed to download the ZIP or copy-install this tool. Model discovery uses the separately installed `opencode models` command and may access the network. A listed model does not certify successful authentication or model capabilities.
 
 ## Sharing the installer
 
@@ -49,7 +57,7 @@ The optional `AGENT_CAST.md` is a fictional, lightly comic presentation of the 2
 
 ## Project setup
 
-From a Git project directory, run `agents-opencode` on Linux or `agents-opencode.cmd` on Windows, then choose **1 – Install / configure**. In Windows CMD, change directory with `cd /d C:\path\to\project`; in PowerShell, use `Set-Location C:\path\to\project`. You may also pass a project path to the command.
+From your project directory, run `agents-opencode` on Linux or `agents-opencode.cmd` on Windows, then choose **1 – Install / configure**. Use the full installed launcher path if the command is not on PATH. In Windows CMD, change directory with `cd /d "C:\path\to\project"`; in PowerShell, use `Set-Location 'C:\path\to\project'`. You may also pass a quoted project path to the command.
 
 The wizard:
 
