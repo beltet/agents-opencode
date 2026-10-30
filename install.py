@@ -2,11 +2,75 @@
 """Shared, offline, per-user installer (Python 3.10+, standard library only)."""
 
 import argparse
+import ntpath
 import os
 from pathlib import Path
 import shutil
 import sys
 import tempfile
+
+
+def broadcast_environment_change():
+    """Notify Windows listeners, bounded to two seconds per recipient."""
+    import ctypes
+    from ctypes import wintypes
+
+    send = ctypes.WinDLL("user32", use_last_error=True).SendMessageTimeoutW
+    # WPARAM, LPARAM, LRESULT and DWORD_PTR are pointer-sized on Win64.
+    send.argtypes = (wintypes.HWND, wintypes.UINT, ctypes.c_size_t,
+                     ctypes.c_ssize_t, wintypes.UINT, wintypes.UINT,
+                     ctypes.POINTER(ctypes.c_size_t))
+    send.restype = ctypes.c_ssize_t
+    message = ctypes.create_unicode_buffer("Environment")
+    result = ctypes.c_size_t()
+    return bool(send(0xFFFF, 0x001A, 0, ctypes.addressof(message),
+                     0x0002, 2000, ctypes.byref(result)))  # SMTO_ABORTIFHUNG
+
+
+def add_windows_user_path(bin_dir, *, registry=None, expand=None, notify=None):
+    """Append only to HKCU Path; return (changed, notification_succeeded).
+
+    Expansion is for comparison only. winreg uses ExpandEnvironmentStringsW,
+    not POSIX expansion (which has different syntax/case/unknown-var rules).
+    Dependencies are injectable so tests never touch the host registry.
+    """
+    if registry is None:
+        import winreg as registry
+    original, value_type = "", registry.REG_SZ
+    try:
+        with registry.OpenKey(registry.HKEY_CURRENT_USER, "Environment", 0,
+                              registry.KEY_QUERY_VALUE) as key:
+            try:
+                original, value_type = registry.QueryValueEx(key, "Path")
+            except FileNotFoundError:
+                pass
+    except FileNotFoundError:
+        pass
+    if value_type not in (registry.REG_SZ, registry.REG_EXPAND_SZ) or not isinstance(original, str):
+        raise OSError("HKCU\\Environment\\Path must be REG_SZ or REG_EXPAND_SZ; value left unchanged")
+
+    def comparison(entry):
+        entry = entry.strip()
+        if len(entry) >= 2 and entry[0] == entry[-1] == '"':
+            entry = entry[1:-1].strip()
+        if value_type == registry.REG_EXPAND_SZ:
+            entry = (expand or registry.ExpandEnvironmentStrings)(entry)
+        return ntpath.normcase(ntpath.normpath(entry)) if entry else ""
+
+    target = str(bin_dir)
+    if comparison(target) in (comparison(entry) for entry in original.split(";")):
+        return False, True
+    # Keep every existing byte/entry, including whitespace and empty entries.
+    updated = original + (";" if original else "") + target
+    with registry.CreateKeyEx(registry.HKEY_CURRENT_USER, "Environment", 0,
+                              registry.KEY_SET_VALUE) as key:
+        registry.SetValueEx(key, "Path", 0, value_type, updated)
+    try:
+        notified = bool((notify or broadcast_environment_change)())
+    except Exception:
+        # Notification is best effort; a committed registry write is not undone.
+        notified = False
+    return True, notified
 
 
 def install_paths(platform=None, environ=None, home=None):
@@ -149,7 +213,9 @@ def main(argv=None):
         "Installera agents-opencode för aktuell användare (utan nätverk).",
         "Install agents-opencode for the current user (offline)."))
     parser.add_argument("--lang", choices=("sv", "en"), help=tr("Språk", "Language"))
-    parser.parse_args(argv)
+    parser.add_argument("--no-path", action="store_true", help=tr(
+        "Ändra inte användarens PATH i Windows.", "Do not change the Windows user PATH."))
+    options = parser.parse_args(argv)
     if sys.version_info < (3, 10):
         print(tr("Python 3.10 eller senare krävs.", "Python 3.10 or later is required."), file=sys.stderr)
         return 1
@@ -162,10 +228,32 @@ def main(argv=None):
     print(tr("Installerat: ", "Installed: ") + str(launcher))
     if backup is not None:
         print(tr("Tidigare version finns kvar i: ", "Previous version retained at: ") + str(backup))
+    status = 0
+    if sys.platform == "win32" and not options.no_path:
+        try:
+            changed, notified = add_windows_user_path(bin_dir)
+        except OSError as error:
+            print(tr("Installationen finns kvar, men användarens PATH kunde inte uppdateras: ",
+                     "Installation retained, but the user PATH could not be updated: ") + str(error),
+                  file=sys.stderr)
+            print(tr("Lägg till följande mapp i användarens Path under Miljövariabler: ",
+                     "Add this folder to the user Path in Environment Variables: ") + str(bin_dir),
+                  file=sys.stderr)
+            status = 1
+        else:
+            print(tr("Användarens PATH uppdaterades." if changed else "Mappen finns redan i användarens PATH.",
+                     "User PATH updated." if changed else "Folder is already in the user PATH."))
+            if not notified:
+                print(tr("Varning: Windows kunde inte meddelas om PATH-ändringen. Logga ut och in om det behövs.",
+                         "Warning: Windows could not be notified of the PATH change. Sign out and back in if needed."),
+                      file=sys.stderr)
+    if sys.platform == "win32":
+        print(tr("Öppna en ny terminal. Installationen kan inte ändra PATH i den överordnade processen eller befintliga terminaler.",
+                 "Open a new terminal. The installer cannot update the parent process PATH or existing terminals."))
     print(tr("Kör: agents-opencode", "Run: agents-opencode"))
     print(tr("Kör direkt utan PATH: ", "Run directly without PATH: ") + '"' + str(launcher) + '"')
     print(tr("Lägg vid behov till i PATH manuellt: ", "If needed, add to PATH manually: ") + str(bin_dir))
-    return 0
+    return status
 
 
 if __name__ == "__main__":

@@ -6,13 +6,14 @@ Requirements: Windows, Python 3.10 or later, Git, and OpenCode installed and con
 
 1. Get the **complete source archive** from GitHub using **Code → Download ZIP**. There is no separate release binary. Extract the complete archive.
 2. In Command Prompt, open the extracted folder and run `install.cmd`. To choose a language directly, use `install.cmd --lang en` or `install.cmd --lang sv`. In PowerShell, use `Set-Location` to enter the folder, then run `.\install.cmd`, `.\install.cmd --lang en`, or `.\install.cmd --lang sv`. Choose a language first; Enter selects English.
+   To opt out of automatic Windows PATH registration, append `--no-path` to the installer command (for example, `install.cmd --no-path`).
 3. In Command Prompt, start `agents-opencode.cmd` from the extracted folder, or run the installed launcher:
 
    ```text
    "%LOCALAPPDATA%\agents-opencode\bin\agents-opencode.cmd"
    ```
 
-   In PowerShell, run `& "$env:LOCALAPPDATA\agents-opencode\bin\agents-opencode.cmd"`. The command directory is not added to PATH automatically. Run the launcher by full path, or manually add the appropriate `%LOCALAPPDATA%` / `$env:LOCALAPPDATA` bin directory to your user PATH and open a new terminal.
+    In PowerShell, run `& "$env:LOCALAPPDATA\agents-opencode\bin\agents-opencode.cmd"`. By default, Windows registers the installed launcher directory in the current user's PATH through HKCU, preserving existing entries and avoiding duplicates; no administrator rights are required. Append `--no-path` to the installer command to opt out. If PATH registration fails, the installer reports an actionable error, but the launcher remains installed and runnable by its full path. PATH updates affect newly started processes, not terminals already open. Open a new terminal; if Windows Terminal or an IDE still has a stale environment, fully restart that parent host or sign out and back in. A Python child process cannot change its parent terminal's environment.
 4. Go to a Git project and start the manager. Choose **1** for the full setup wizard. Command Prompt example: `agents-opencode.cmd install --lang sv`. PowerShell example: `.\agents-opencode.cmd install --lang sv`. Interactive runs ask for language first; Enter selects English. Noninteractive runs default to English.
 
 ## Linux installation

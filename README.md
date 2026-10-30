@@ -16,7 +16,7 @@ Requirements: Windows, Python 3.10 or later, Git, and OpenCode installed and con
    ```
 
    In PowerShell, use `Set-Location` to enter the extracted folder, then run `.\install.cmd` or `.\install.cmd --lang en` / `.\install.cmd --lang sv`.
-   The installer asks for language first (Swedish or English; Enter selects English).
+    The installer asks for language first (Swedish or English; Enter selects English). Windows installation adds the installed launcher directory to the current user's PATH by default; use `install.cmd --no-path` to opt out.
 3. In Command Prompt, start `agents-opencode.cmd` from the extracted folder, or use the installed launcher:
 
    ```text
@@ -24,7 +24,9 @@ Requirements: Windows, Python 3.10 or later, Git, and OpenCode installed and con
    ```
 
    In PowerShell, use `& "$env:LOCALAPPDATA\agents-opencode\bin\agents-opencode.cmd"`.
-   The installed command directory is **not added to PATH automatically**. Either run the launcher by its full path, or add the appropriate `%LOCALAPPDATA%` / `$env:LOCALAPPDATA` directory to your user PATH manually and open a new terminal. No administrator rights are required.
+    By default, the Windows installer registers `%LOCALAPPDATA%\agents-opencode\bin` in the current user's PATH via the per-user Windows environment setting (HKCU); it requires no administrator rights, preserves existing PATH entries, and avoids adding a duplicate. Use `install.cmd --no-path` to skip PATH registration. If registration fails, the installer reports an actionable error; the launcher remains installed and runnable by its full path as shown above.
+
+    PATH changes apply to newly started processes, not terminals already open. Open a new terminal; if Windows Terminal or an IDE still has a stale environment, fully restart that parent application or sign out and back in. A child process such as Python cannot change the environment of its parent terminal.
 4. In a project folder, start the installed launcher by its full path as shown above, or use `agents-opencode.cmd` if its `bin` directory is on PATH. Choose **1** to configure the project. Append `--lang en` or `--lang sv` to select a language directly. Without the flag, the manager asks for language first on interactive startup; Enter defaults to English. In noninteractive use, the default is English.
 
 OpenCode and its model providers must be installed/configured separately; the manager uses `opencode models` when you configure a project. The manager's installer does not download software or contact a network. If OpenCode's Windows runtime needs Git Bash, that is an OpenCode runtime requirement, not a requirement to run `install.cmd`.
@@ -43,7 +45,7 @@ The user launcher is `~/.local/bin/agents-opencode`; central files are in `${XDG
 
 Share the **complete curated source archive** (for example, the GitHub repository's **Code → Download ZIP** archive). It must contain the platform entry points, `lib/`, profiles, and documentation. Do not share a locally installed manager directory or generated project configuration as though it were the installer. User-specific files such as `opencode.json`, `AGENTS.md`, `PROJECT_POLICY.md`, `AGENT_ACCESS_POLICY.json`, and `.opencode/` are generated/configured locally and are not part of the curated distribution. There is no separate release ZIP/binary unless one is explicitly published in the future.
 
-The optional `AGENT_CAST.md` is a fictional, lightly comic presentation of the 23 roles—not real people, identities, or relationships. It does not alter role instructions, authority, or behavior; humor is optional.
+The optional `AGENT_CAST.md` is a fictional, lightly comic presentation of the 23 roles—not real people, identities, or relationships. It does not alter role instructions, authority, or behavior; humor is optional. A handoff may use at most one brief, relevant light phrase in an existing field, subject to the tone and safety limits in `lib/TEAM_RULES.md`.
 
 ## Project setup
 

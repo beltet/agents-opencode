@@ -243,6 +243,7 @@ class InstallerTests(unittest.TestCase):
                 try:
                     with mock.patch.dict(sys.modules, {"i18n": i18n}), \
                          mock.patch.object(installer, "install", side_effect=run_install), \
+                         mock.patch.object(installer, "add_windows_user_path", return_value=(False, True)), \
                          mock.patch.object(installer, "install_paths", return_value=(self.destination, self.bin)), \
                          contextlib.redirect_stdout(output):
                         self.assertEqual(installer.main(args), 0)

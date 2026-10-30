@@ -6,13 +6,14 @@ Krav: Windows, Python 3.10 eller senare, Git och OpenCode installerat/konfigurer
 
 1. Hämta hela källarkivet från GitHub med **Code → Download ZIP**. Det finns ingen separat release-binär. Packa upp hela arkivet.
 2. I CMD: gå till den uppackade katalogen och kör `install.cmd`. Ange språk direkt med `install.cmd --lang sv` eller `install.cmd --lang en`. I PowerShell: gå till katalogen med `Set-Location` och kör `.\install.cmd` eller `.\install.cmd --lang sv` / `.\install.cmd --lang en`. Språk väljs först; Enter väljer engelska.
+   Lägg till `--no-path` i installationskommandot (t.ex. `install.cmd --no-path`) för att avstå från automatisk PATH-registrering.
 3. I CMD, starta `agents-opencode.cmd` från den uppackade katalogen eller kör den installerade filen:
 
    ```text
    "%LOCALAPPDATA%\agents-opencode\bin\agents-opencode.cmd"
    ```
 
-   I PowerShell, kör `& "$env:LOCALAPPDATA\agents-opencode\bin\agents-opencode.cmd"`. Kommandokatalogen läggs inte automatiskt till i PATH. Kör filen med full sökväg eller lägg rätt katalog (`%LOCALAPPDATA%\agents-opencode\bin` i CMD eller `$env:LOCALAPPDATA\agents-opencode\bin` i PowerShell) till i användarens PATH manuellt och öppna ett nytt terminalfönster.
+   I PowerShell, kör `& "$env:LOCALAPPDATA\agents-opencode\bin\agents-opencode.cmd"`. Som standard registreras katalogen i den aktuella användarens PATH via HKCU; befintliga poster bevaras, dubbletter undviks och administratörsrättigheter behövs inte. Lägg till `--no-path` vid installationen för att avstå. Vid fel visas ett åtgärdsinriktat meddelande, men startprogrammet finns kvar och kan köras med full sökväg. Ändringen gäller nya processer, inte öppna terminaler. Öppna en ny terminal; om Windows Terminal eller en IDE fortfarande har gammal miljö, starta om hela värdprogrammet eller logga ut och in igen. Python-underprocesser kan inte ändra förälderns terminalmiljö.
 4. Gå till ett Git-projekt och starta managern. Välj **1** för hela konfigurationsguiden. CMD-exempel: `agents-opencode.cmd install --lang sv`. PowerShell-exempel: `.\agents-opencode.cmd install --lang sv`. Interaktiv körning frågar om språk först; Enter väljer engelska. I icke-interaktiv körning är standardspråket engelska.
 
 ## Linux
