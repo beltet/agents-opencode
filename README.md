@@ -76,6 +76,7 @@ Commands accept an optional project path. On Windows, use the `.cmd` launcher; t
 | Action | Command |
 | --- | --- |
 | Install, migrate, or configure a project | `agents-opencode install` |
+| Refresh installed profiles/workflow, preserving project choices | `agents-opencode refresh` |
 | Reassign selected models | `agents-opencode models-all` |
 | Add/remove installed roles | `agents-opencode agents` |
 | Edit permission choices | `agents-opencode permissions` |
@@ -87,6 +88,64 @@ Commands accept an optional project path. On Windows, use the `.cmd` launcher; t
 | List available models | `agents-opencode list-models` |
 
 The management UI language is selected per run; it is not a translation of generated agent profiles or project instructions, which remain English.
+
+## Persistent delivery and team updates
+
+The maintained behavior sources are `lib/profiles/*.md`, `lib/TEAM_RULES.md`,
+`lib/WORKFLOW.md` and `lib/HANDOFF_TEMPLATE.md`. These are versioned in this
+repository; generated project installations remain local. Use the same source
+revision on each computer when consistent team behavior is required.
+
+All 23 packaged profiles omit `steps`. The primary follows an
+**implement → verify → integrate → continue** cycle over the user's approved
+queue. Checkpoints, commits, version boundaries and specialist handoffs are not
+stopping conditions. Routine implementation decisions, build fixes and regression
+checks are autonomous within approved scope. The shared decision table reserves
+changed product direction, substantial redesign, new cost commitments and exceeded
+explicit limits for the owner. Blocked items do not suspend independent work.
+Commit/push still requires explicit authorization.
+
+The primary coordinates specialist delegation; the workflow does not depend on
+nested agent calls or increased delegation depth. Failed or truncated specialist
+work is inspected and recovered/reassigned. Alternative providers must already be
+configured and authorized; no fallback provider or spending authority is invented.
+Keep a short active state/queue in the project's designated local work area
+(normally `.local-work/ACTIVE.md`) with acceptance criteria, blockers, test evidence
+and the exact next action. Read historical decisions selectively, preserving any
+explicit project-required reads and actual user review gates.
+
+To update an **already configured project**, first install this updated package
+with `bash install.sh` (Linux) or `.\install.cmd` (Windows). Then run:
+
+```sh
+agents-opencode refresh "/path/to/project"
+```
+
+On Windows use `agents-opencode.cmd refresh "C:\path\to\project"`.
+The source-tree launcher can also run `refresh` directly. Menu option **12** is
+equivalent. This command uses the existing manifest's selected roles and updates
+their profiles, shared rules and the managed section of `AGENTS.md`. It removes
+old inline `steps`/legacy `maxSteps` overrides for those roles, preserving model
+choices, providers, permissions, access policy, project policy, custom unselected
+agents, active memory and instructions outside the managed section. Changed files
+are backed up; local edits inside managed profiles are replaced. Missing profile
+sources cause a preflight error, so retain any custom source profiles. Projects
+without a manifest need the normal `install` wizard first.
+
+**Quit and restart OpenCode after updating.** Use `opencode debug agent orchestrator`
+to inspect the resolved profile in your installed OpenCode version, including
+possible global/parent overrides. **Omitting `steps` in a project profile does not
+clear an inherited cap from another configuration layer.** In particular, older
+profiles in `~/.opencode/agents/` can still supply step caps in OpenCode 1.19.5;
+also inspect global agents/config under `~/.config/opencode/`. The project refresh
+command does not modify these other installations. Update their maintained sources
+and refresh them separately, or explicitly reconcile the obsolete cap in its
+owning configuration before claiming the active agent is uncapped.
+No explicit step cap does not remove model quota,
+context or runtime limits, and these instructions cannot restart an ended session.
+Verify continuation on a real approved multi-item task and use actual session/log
+evidence to investigate any unexpected stop; installer tests alone cannot prove
+the model will continue correctly in every run.
 
 ## Permissions and security
 

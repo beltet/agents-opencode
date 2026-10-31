@@ -29,6 +29,8 @@ class TestInstaller(unittest.TestCase):
    fm=p.read_text().split('---',2)[1]
    self.assertNotIn('model:',fm)
    self.assertNotIn('permission:',fm)
+   self.assertNotIn('steps:',fm)
+   self.assertNotIn('maxSteps:',fm)
  def test_install_preserves_custom_json_and_old_agents_file(self):
   mgr.apply(self.project,['orchestrator','system-architect'],{'orchestrator':'some/model','system-architect':'other/model'},PERM,'SHAREABLE')
   cfg=json.loads((self.project/'opencode.json').read_text())
@@ -77,6 +79,70 @@ class TestInstaller(unittest.TestCase):
   self.assertEqual(content.count('Custom intro'),1)
   self.assertNotIn('# Project AI team instructions',content)
   self.assertEqual(content.count(mgr.MARK_OPEN),1)
+
+ def test_refresh_preserves_owner_controls_and_removes_inline_caps(self):
+  selected=['orchestrator','software-engineer']
+  mgr.apply(self.project,selected,{'orchestrator':'a/b','software-engineer':'c/d'},PERM,'SHAREABLE')
+  config_path=self.project/'opencode.json'
+  cfg=json.loads(config_path.read_text())
+  cfg['agent']['orchestrator'].update(steps=36,maxSteps=36,temperature=0.2)
+  cfg['agent']['software-engineer']['steps']=24
+  cfg['agent']['custom']['steps']=7
+  cfg['agent']['orchestrator']['permission']={'task':'deny'}
+  cfg['enabled_providers'].append('approved-fallback')
+  cfg['instructions'].append('owner-rules.md')
+  config_path.write_text(json.dumps(cfg))
+  expected=json.loads(json.dumps(cfg))
+  for name in selected:
+   expected['agent'][name].pop('steps',None)
+   expected['agent'][name].pop('maxSteps',None)
+  protected=[self.project/'AGENT_ACCESS_POLICY.json',self.project/'PROJECT_POLICY.md',self.project/'.opencode/team/ACCESS_RULES.md']
+  before={p:p.read_bytes() for p in protected}
+  state=self.project/'.local-work/ACTIVE.md'
+  state.parent.mkdir(); state.write_text('Owner queue and actual approval gate\n')
+  installed=self.project/'.opencode/agents/orchestrator.md'
+  installed.write_text('Locally edited old profile\n')
+  custom=self.project/'.opencode/agents/custom.md'; custom.write_text('custom role\n')
+  result=subprocess.run([sys.executable,str(MANAGER),'refresh',str(self.project),'--lang','en'],capture_output=True,text=True)
+  self.assertEqual(result.returncode,0,result.stderr)
+  self.assertIn('Restart OpenCode',result.stdout)
+  self.assertEqual(json.loads(config_path.read_text()),expected)
+  self.assertEqual(installed.read_bytes(),(mgr.PROFILES/'orchestrator.md').read_bytes())
+  self.assertTrue(list(installed.parent.glob('orchestrator.md.backup-agentteam-*')))
+  self.assertEqual(custom.read_text(),'custom role\n')
+  self.assertEqual(state.read_text(),'Owner queue and actual approval gate\n')
+  for p,content in before.items(): self.assertEqual(p.read_bytes(),content)
+  self.assertIn('Existing team instructions',(self.project/'AGENTS.md').read_text())
+  self.assertEqual((self.project/'AGENTS.md').read_text().count(mgr.MARK_OPEN),1)
+  backups=set(self.project.rglob('*.backup-agentteam-*'))
+  mgr.refresh_team(self.project)
+  self.assertEqual(set(self.project.rglob('*.backup-agentteam-*')),backups)
+
+ def test_refresh_requires_installation_and_preflights_missing_sources(self):
+  before=(self.project/'opencode.json').read_bytes()
+  with self.assertRaisesRegex(RuntimeError,'install'): mgr.refresh_team(self.project)
+  self.assertEqual((self.project/'opencode.json').read_bytes(),before)
+  mgr.apply(self.project,['orchestrator'],{'orchestrator':'a/b'},PERM,'SHAREABLE')
+  manifest_path=self.project/mgr.MANIFEST
+  manifest=json.loads(manifest_path.read_text())
+  manifest['installed_agents'].append('missing-custom-agent')
+  manifest_path.write_text(json.dumps(manifest))
+  installed=self.project/'.opencode/agents/orchestrator.md'
+  installed.write_text('Preserve on failed preflight\n')
+  before=(self.project/'opencode.json').read_bytes()
+  with self.assertRaisesRegex(RuntimeError,'missing-custom-agent'): mgr.refresh_team(self.project)
+  self.assertEqual(installed.read_text(),'Preserve on failed preflight\n')
+  self.assertEqual((self.project/'opencode.json').read_bytes(),before)
+
+ def test_reinstall_removes_managed_inline_step_overrides_only(self):
+  cfg=json.loads((self.project/'opencode.json').read_text())
+  cfg['agent']['orchestrator']={'steps':36,'maxSteps':36,'temperature':0.2}
+  cfg['agent']['custom']['steps']=9
+  (self.project/'opencode.json').write_text(json.dumps(cfg))
+  mgr.apply(self.project,['orchestrator'],{'orchestrator':'a/b'},PERM,'SHAREABLE')
+  cfg=json.loads((self.project/'opencode.json').read_text())
+  self.assertEqual(cfg['agent']['orchestrator'],{'temperature':0.2,'model':'a/b'})
+  self.assertEqual(cfg['agent']['custom']['steps'],9)
 
 class TestCharacterProfiles(unittest.TestCase):
  def test_cast_matches_profiles_and_keeps_personas_nonbinding(self):

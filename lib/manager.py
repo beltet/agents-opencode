@@ -476,8 +476,12 @@ def managed_section(selected, mode):
        '## Installed OpenCode engineering team (managed)\n'
        f'Installed specialists ({len(selected)}): {summary}.\n\n'
        'Only activate a specialist when its expertise is required. If present, orchestrator coordinates; '
-       'system-architect and technical-documenter join the core when installed. '\
+       'architect/documenter consultation is need-based, not an implementation gate. '
        'Follow `.opencode/team/TEAM_RULES.md`, `.opencode/team/WORKFLOW.md`, `PROJECT_POLICY.md` and `AGENT_ACCESS_POLICY.json`.\n'
+       'Implement, verify, integrate and continue through feasible authorized work. A checkpoint, commit, '
+       'version boundary or specialist handoff is not a stopping condition. Do not invent approval gates.\n'
+       'Use compact active memory in the repository-designated local work area; read history selectively. '
+       'The primary coordinates delegation; collaborator lists do not authorize nested agent calls.\n'
        'Admit uncertainty; verify small experiments before costly simulations; hand off concise findings.\n'
        f'Project classification: **{mode}**. A selected cloud model may see project context; never send secrets.\n'
        'Technical agent profiles are written in English; communicate in the user’s requested language.\n'
@@ -498,6 +502,51 @@ def update_agents_md(project, selected, mode):
         text=text.rstrip()+'\n\n'+new+'\n'
     write_text(file,text)
 
+def sync_team_files(project, selected):
+    """Copy maintained sources without changing models, access policy or active memory."""
+    available=profiles()
+    unknown=set(selected)-set(available)
+    if unknown:
+        raise RuntimeError(tr('Agentkällor saknas: ','Agent sources missing: ')+', '.join(sorted(unknown)))
+    for name in selected:
+        write_text(project/'.opencode/agents'/(name+'.md'),available[name].read_text(encoding='utf-8'))
+    for name in ('TEAM_RULES.md','WORKFLOW.md','HANDOFF_TEMPLATE.md'):
+        write_text(project/'.opencode/team'/name,(ROOT/name).read_text(encoding='utf-8'))
+
+
+def clear_managed_step_limits(agents, selected):
+    # Old inline overrides can reinstate caps even after Markdown is refreshed.
+    for name in selected:
+        if isinstance(agents.get(name),dict):
+            agents[name].pop('steps',None)
+            agents[name].pop('maxSteps',None)  # legacy OpenCode spelling
+
+
+def refresh_team(project):
+    """Refresh an installed team's behavior, preserving owner-selected controls."""
+    manifest=read_manifest(project)
+    selected=manifest.get('installed_agents',[])
+    if not selected:
+        raise RuntimeError(tr('Inget installerat team. Kör install först.','No installed team. Run install first.'))
+    if not isinstance(selected,list) or any(not isinstance(n,str) for n in selected):
+        raise RuntimeError(tr('Ogiltig agentlista i manifestet','Invalid manifest agent list'))
+    cfg=json_load(project/'opencode.json')
+    agents=cfg.get('agent',{})
+    if not isinstance(agents,dict):
+        raise RuntimeError(tr('opencode.json agent måste vara ett objekt','opencode.json agent must be an object'))
+    # Preflight before updating files; retain unavailable custom agents untouched.
+    unknown=set(selected)-set(profiles())
+    if unknown:
+        raise RuntimeError(tr('Agentkällor saknas: ','Agent sources missing: ')+', '.join(sorted(unknown)))
+    clear_managed_step_limits(agents,selected)
+    sync_team_files(project,selected)
+    update_agents_md(project,selected,manifest.get('mode','PRIVATE'))
+    write_json(project/'opencode.json',cfg)
+    write_json(project/MANIFEST,{**manifest,'version':VERSION,'workflow_revision':2})
+    say(tr('Teamets profiler och arbetsregler uppdaterade. Modellval, behörigheter och access-policy bevarade. Starta om OpenCode.',
+           'Team profiles and workflow refreshed. Models, permissions and access policy preserved. Restart OpenCode.'))
+
+
 def apply(project, selected, models, perm, mode, approved_remote=None, access=None):
     if not project.is_dir(): raise RuntimeError(tr('Projektkatalogen finns inte','Project directory does not exist'))
     existing=json_load(project/'opencode.json')
@@ -517,9 +566,7 @@ def apply(project, selected, models, perm, mode, approved_remote=None, access=No
         target=agents_dir/(name+'.md')
         if target.exists():
             backup(target); target.unlink()
-    for name in selected:
-        template=profiles()[name]
-        write_text(agents_dir/(name+'.md'),template.read_text(encoding='utf-8'))
+    sync_team_files(project,selected)
     cfg=existing
     cfg.setdefault('$schema','https://opencode.ai/config.json')
     a=cfg.get('agent') or {}
@@ -534,6 +581,7 @@ def apply(project, selected, models, perm, mode, approved_remote=None, access=No
         # the configured project profile is authoritative for these managed agents.
         value.pop('permission',None)
         a[name]=value
+    clear_managed_step_limits(a,selected)
     cfg['agent']=a
     if 'orchestrator' in selected:
         cfg['default_agent']='orchestrator'
@@ -553,13 +601,6 @@ def apply(project, selected, models, perm, mode, approved_remote=None, access=No
     if provider_ids:
         cfg['enabled_providers']=provider_ids
     write_json(project/'opencode.json',cfg)
-    team=project/'.opencode/team'
-    team.mkdir(parents=True,exist_ok=True)
-    for t in ['TEAM_RULES.md','WORKFLOW.md','HANDOFF_TEMPLATE.md']:
-        content=(ROOT/t).read_text(encoding='utf-8')
-        # change outdated count for selected subset (no 23-role claims)
-        content=content.replace('all 23 agents','the installed agents').replace('all 23','all installed').replace('23 agents','available agents').replace('remaining 20 experts','other selected experts')
-        write_text(team/t,content)
     write_json(project/ACCESS_FILE,access)
     write_text(project/ACCESS_RULES,render_access_rules(access))
     (project/'.opencode/tools').mkdir(parents=True,exist_ok=True)
@@ -567,7 +608,7 @@ def apply(project, selected, models, perm, mode, approved_remote=None, access=No
     write_text(project/'.opencode/tools/access_fetch.py',(ROOT/'access_fetch.py').read_text(encoding='utf-8'))
     update_agents_md(project,selected,mode)
     remote=approved_remote if approved_remote is not None else manifest.get('approved_remote')
-    info={'version':VERSION,'installed_agents':selected,'models':models,'mode':mode,
+    info={'version':VERSION,'workflow_revision':2,'installed_agents':selected,'models':models,'mode':mode,
           'permissions':perm,'access_policy':ACCESS_FILE,'approved_remote':remote,'models_source':'opencode models'}
     write_json(project/MANIFEST,info)
     policy=(f'# Project policy (generated by agents-opencode {VERSION})\n\n'
@@ -578,13 +619,16 @@ def apply(project, selected, models, perm, mode, approved_remote=None, access=No
        '- Model APIs: only approved providers, subject to actual endpoint verification.\n'
        '- Access allow/deny lists: `AGENT_ACCESS_POLICY.json` (agent-facing rules in `.opencode/team/ACCESS_RULES.md`).\n'
        '- Network/filesystem: instructions and tool permissions are NOT OS security boundaries.\n'
-       '- Git: local branches/commits coordinated by orchestrator, push according to policy.\n'
+       '- Git: integration coordinated by orchestrator; commit/push only with explicit authorization and according to policy.\n'
        '- A confidential project requires verified local inference and OS isolation where appropriate.\n'
-       '- Substantial architecture changes and large resource increases require user authorization.\n')
+       '- Routine implementation, bug fixes and regression checks are autonomous within approved scope.\n'
+       '- Substantial redesign, changed product direction, new cost commitments and exceeded explicit budgets require user authorization (see team decision table).\n'
+       '- Continue feasible authorized work after checkpoints; isolate blockers and keep compact active memory.\n')
     write_text(project/'PROJECT_POLICY.md',policy)
     say(tr('\nKlart: {count} agenter installerade i {project}.','\nDone: {count} agents installed in {project}.').format(count=len(selected),project=project))
     say(tr('Projektets konfiguration och tidigare filer har säkerhetskopierats vid ändring.','Project configuration and previous files were backed up when changed.'))
     say(tr('OBS: eventuella .opencode/agent-filer/andra överordnade globala regler kontrolleras separat av OpenCode.','NOTE: any .opencode/agent files or other overriding global rules are handled separately by OpenCode.'))
+    say(tr('Starta om OpenCode för att läsa in de nya profilerna och reglerna.','Restart OpenCode to load the new profiles and rules.'))
 
 def configure(project, mode='full'):
     if not project.exists():
@@ -735,6 +779,7 @@ def menu():
         say(tr(' 9) Lista tillgängliga modeller',' 9) List available models'))
         say(tr('10) Redigera fil- och nätverkslistor (whitelist/blacklist)','10) Edit file and network allowlists/denylists'))
         say(tr('11) Synkronisera manuellt redigerad access-policy','11) Synchronize manually edited access policy'))
+        say(tr('12) Uppdatera teamets profiler och arbetsregler (behåll projektval)','12) Refresh team profiles and workflow (preserve project choices)'))
         say(tr(' 0) Avsluta',' 0) Exit'))
         n=prompt(tr('Välj','Choose'),'0')
         if n=='0': return
@@ -750,6 +795,7 @@ def menu():
             elif n=='8': return run_opencode(project,True)
             elif n=='10':configure_access(project)
             elif n=='11':sync_access(project)
+            elif n=='12':refresh_team(project)
             elif n=='9':
                 if confirm(tr('Tillåt opencode models (kan kontakta modellkatalogen)?','Allow opencode models (may contact the model catalog)?'),False):
                     for m in list_models(project): say(m)
@@ -779,7 +825,7 @@ def main(argv=None):
         i+=1
     args=positional
     if any(a in ('--help','help','-h') for a in args):
-        say('agents-opencode [--lang sv|en] [install|models-all|agents|permissions|access|sync-access|status|add-agent|run|resume|list-models] [PROJECT_PATH]')
+        say('agents-opencode [--lang sv|en] [install|refresh|models-all|agents|permissions|access|sync-access|status|add-agent|run|resume|list-models] [PROJECT_PATH]')
         say(tr('Installation: python install.py (användarnivå). Ingen modell är förvald.','Installation: python install.py (user-level). No model is preselected.'))
         say(tr('--lang sv|en kan placeras före eller efter kommandot. Utan flaggan väljs språk vid interaktiv start; annars används engelska.','--lang sv|en may appear before or after the command. Without it, interactive startup asks for a language; otherwise English is used.'))
         return 0
@@ -791,6 +837,7 @@ def main(argv=None):
     if cmd=='add-agent': create_agent(); return
     project=Path(args[1]).expanduser().resolve() if len(args)>1 else Path.cwd().resolve()
     if cmd in ('install','init'): configure(project,'full')
+    elif cmd=='refresh': refresh_team(project)
     elif cmd in ('models-all','models'): configure(project,'models')
     elif cmd=='agents': configure(project,'agents')
     elif cmd=='permissions': configure(project,'permissions')
