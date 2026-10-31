@@ -69,6 +69,22 @@ The wizard:
 
 The installer may offer to initialize a project as a Git repository. Existing project files that it changes are backed up. This does not mean every global or parent OpenCode configuration has been inspected; review your setup and backups.
 
+### Project-local teams only
+
+Agent profiles, team instructions, role/model assignments and permissions are
+installed in the selected project, never as a shared active team in your home
+directory or OpenCode's global configuration. The manager rejects those locations
+and managed paths that resolve outside the selected project through symlinks.
+The centrally installed `agents-opencode` tool stores reusable **source templates**;
+these are not active global agents and are not loaded by OpenCode as project roles.
+
+Each project can select different roles, models, permissions and profile contents.
+Editing a project's `.opencode/agents/*.md` affects that project only. An explicit
+`refresh` replaces its managed profiles with the current templates and backs up
+local edits first; it does not update other projects. A tool/package update alone
+does not refresh existing project teams. OpenCode's own unrelated global settings
+and built-in agents continue to work normally.
+
 ## Manager commands
 
 Commands accept an optional project path. On Windows, use the `.cmd` launcher; the launcher can be invoked from the extracted folder or the installed location above. Language flags may be given anywhere on the command line, for example `agents-opencode.cmd status C:\work\project --lang sv`.

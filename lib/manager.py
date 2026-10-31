@@ -60,8 +60,33 @@ def action_label(value):
     return {'allow':tr('tillåt','allow'), 'ask':tr('fråga','ask'), 'deny':tr('neka','deny')}.get(value, value)
 
 def project_dir(arg=None):
-    if arg: return Path(arg).expanduser().resolve()
-    return Path(prompt(tr('Projektkatalog','Project directory'),str(Path.cwd()))).expanduser().resolve()
+    value=arg if arg else prompt(tr('Projektkatalog','Project directory'),str(Path.cwd()))
+    return require_local_project(value)
+
+
+def require_local_project(value):
+    """Team installations belong to a project, never a home/global agent layer."""
+    project=Path(value).expanduser().resolve()
+    home=Path.home().resolve()
+    global_dirs=[home/'.opencode',home/'.config/opencode',
+                 Path(os.environ.get('XDG_CONFIG_HOME') or home/'.config')/'opencode']
+    if os.environ.get('APPDATA'):
+        global_dirs.append(Path(os.environ['APPDATA'])/'opencode')
+    if os.environ.get('OPENCODE_CONFIG_DIR'):
+        global_dirs.append(Path(os.environ['OPENCODE_CONFIG_DIR']).expanduser())
+    if project==home or project.parent==project or any(
+            project.is_relative_to(p.resolve()) for p in global_dirs):
+        raise RuntimeError(tr('Välj en lokal projektkatalog, inte hemkatalogen eller OpenCodes globala konfiguration.',
+                              'Choose a local project directory, not the home directory or OpenCode global configuration.'))
+    targets=['AGENTS.md','PROJECT_POLICY.md',ACCESS_FILE,'opencode.json',str(MANIFEST),
+             '.opencode','.opencode/agents','.opencode/team','.opencode/tools',
+             ACCESS_RULES,'.opencode/tools/access_check.py','.opencode/tools/access_fetch.py']
+    targets += ['.opencode/team/'+name for name in ('TEAM_RULES.md','WORKFLOW.md','HANDOFF_TEMPLATE.md')]
+    targets += [str(p.relative_to(project)) for p in (project/'.opencode/agents').glob('*.md')]
+    for name in targets:
+        if not (project/name).resolve().is_relative_to(project):
+            raise RuntimeError(tr('Installationsfilen pekar utanför projektet: ','Installation path points outside the project: ')+name)
+    return project
 
 def profiles():
     out = {p.stem:p for p in PROFILES.glob('*.md')}
@@ -504,6 +529,7 @@ def update_agents_md(project, selected, mode):
 
 def sync_team_files(project, selected):
     """Copy maintained sources without changing models, access policy or active memory."""
+    project=require_local_project(project)
     available=profiles()
     unknown=set(selected)-set(available)
     if unknown:
@@ -524,6 +550,7 @@ def clear_managed_step_limits(agents, selected):
 
 def refresh_team(project):
     """Refresh an installed team's behavior, preserving owner-selected controls."""
+    project=require_local_project(project)
     manifest=read_manifest(project)
     selected=manifest.get('installed_agents',[])
     if not selected:
@@ -548,6 +575,7 @@ def refresh_team(project):
 
 
 def apply(project, selected, models, perm, mode, approved_remote=None, access=None):
+    project=require_local_project(project)
     if not project.is_dir(): raise RuntimeError(tr('Projektkatalogen finns inte','Project directory does not exist'))
     existing=json_load(project/'opencode.json')
     if access is None:
@@ -631,6 +659,7 @@ def apply(project, selected, models, perm, mode, approved_remote=None, access=No
     say(tr('Starta om OpenCode för att läsa in de nya profilerna och reglerna.','Restart OpenCode to load the new profiles and rules.'))
 
 def configure(project, mode='full'):
+    project=require_local_project(project)
     if not project.exists():
         if confirm(tr('Skapa projektkatalog {project}?','Create project directory {project}?').format(project=project),False): project.mkdir(parents=True)
         else: raise RuntimeError(tr('Projektet finns inte','Project does not exist'))
@@ -674,6 +703,7 @@ def configure(project, mode='full'):
     apply(project,selected,models,perms,classif,access=access)
 
 def sync_access(project):
+    project=require_local_project(project)
     if not read_manifest(project):raise RuntimeError(tr('Installera agentteamet i projektet först.','Install the agent team in the project first.'))
     access=load_policy(project/ACCESS_FILE)
     if Path(access['project_root']).resolve()!=project.resolve():
@@ -694,6 +724,7 @@ def sync_access(project):
 
 
 def configure_access(project):
+    project=require_local_project(project)
     manifest=read_manifest(project)
     if not manifest:raise RuntimeError(tr('Installera agentteamet i projektet först.','Install the agent team in the project first.'))
     current=load_policy(project/ACCESS_FILE) if (project/ACCESS_FILE).exists() else default_access_policy(project,manifest.get('permissions',{}))

@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 MANAGER=Path(__file__).resolve().parents[1]/'lib'/'manager.py'
@@ -143,6 +144,60 @@ class TestInstaller(unittest.TestCase):
   cfg=json.loads((self.project/'opencode.json').read_text())
   self.assertEqual(cfg['agent']['orchestrator'],{'temperature':0.2,'model':'a/b'})
   self.assertEqual(cfg['agent']['custom']['steps'],9)
+
+ def test_home_and_global_team_destinations_rejected_before_writes(self):
+  environment={'XDG_CONFIG_HOME':str(self.root/'config'),
+               'APPDATA':str(self.root/'appdata'),
+               'OPENCODE_CONFIG_DIR':str(self.root/'override')}
+  blocked=[self.root,self.root/'.opencode',self.root/'.opencode/agents',
+           self.root/'.config/opencode',self.root/'config/opencode',
+           self.root/'appdata/opencode',self.root/'override/agents',Path(self.root.anchor)]
+  before=set(self.root.rglob('*'))
+  with mock.patch.object(mgr.Path,'home',return_value=self.root), mock.patch.dict(os.environ,environment):
+   for path in blocked:
+    for operation in (lambda: mgr.configure(path),
+                      lambda: mgr.apply(path,['orchestrator'],{'orchestrator':'a/b'},PERM,'SHAREABLE'),
+                      lambda: mgr.refresh_team(path),
+                      lambda: mgr.sync_team_files(path,['orchestrator']),
+                      lambda: mgr.sync_access(path),
+                      lambda: mgr.configure_access(path)):
+     with self.subTest(path=path), self.assertRaisesRegex(RuntimeError,'local project directory'):
+      operation()
+   self.assertEqual(mgr.require_local_project(self.project),self.project)
+  self.assertEqual(set(self.root.rglob('*')),before)
+
+ def test_install_cannot_follow_managed_paths_outside_project(self):
+  outside=self.root/'outside'; outside.mkdir()
+  marker=outside/'orchestrator.md'; marker.write_text('Outside profile\n')
+  directory=self.project/'.opencode'; directory.mkdir()
+  try: (directory/'agents').symlink_to(outside,target_is_directory=True)
+  except (OSError,NotImplementedError): self.skipTest('Symlinks unavailable')
+  before=(self.project/'opencode.json').read_bytes()
+  for operation in (lambda: mgr.apply(self.project,['orchestrator'],{'orchestrator':'a/b'},PERM,'SHAREABLE'),
+                    lambda: mgr.refresh_team(self.project)):
+   with self.assertRaisesRegex(RuntimeError,'outside the project'): operation()
+  self.assertEqual(marker.read_text(),'Outside profile\n')
+  self.assertEqual((self.project/'opencode.json').read_bytes(),before)
+  (directory/'agents').unlink()
+  (directory/'agents').mkdir()
+  (directory/'agents/orchestrator.md').symlink_to(marker)
+  with self.assertRaisesRegex(RuntimeError,'outside the project'):
+   mgr.sync_team_files(self.project,['orchestrator'])
+  self.assertEqual(marker.read_text(),'Outside profile\n')
+
+ def test_project_specific_profiles_and_models_remain_independent(self):
+  second=self.root/'second'; second.mkdir()
+  mgr.apply(self.project,['orchestrator'],{'orchestrator':'first/model'},PERM,'SHAREABLE')
+  mgr.apply(second,['orchestrator','software-engineer'],{'orchestrator':'second/model','software-engineer':'third/model'},PERM,'SHAREABLE')
+  profile=second/'.opencode/agents/orchestrator.md'
+  profile.write_text(profile.read_text()+'\nProject-specific implementation rules.\n')
+  second_config=(second/'opencode.json').read_bytes()
+  second_profile=profile.read_bytes()
+  mgr.refresh_team(self.project)
+  self.assertEqual((second/'opencode.json').read_bytes(),second_config)
+  self.assertEqual(profile.read_bytes(),second_profile)
+  self.assertEqual(json.loads((self.project/'opencode.json').read_text())['agent']['orchestrator']['model'],'first/model')
+  self.assertFalse((self.project/'.opencode/agents/software-engineer.md').exists())
 
 class TestCharacterProfiles(unittest.TestCase):
  def test_cast_matches_profiles_and_keeps_personas_nonbinding(self):
