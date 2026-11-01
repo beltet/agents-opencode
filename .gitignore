@@ -1,18 +1,22 @@
-__pycache__/
-*.pyc
-.pytest_cache/
-.venv/
-*.zip
-*.log
+# Build artifacts
+/agents-opencode
+/agents-opencode.exe
+/dist/
+*.test
+*.out
 
-# Local installation in this development repository (sources live in lib/).
+# Project-local generated installation (do not commit accidentally)
 /.opencode/
+/.agents-opencode/
 /AGENTS.md
-/PROJECT_POLICY.md
 /AGENT_ACCESS_POLICY.json
+/PROJECT_BRIEF.md
 /opencode.json
-/opencode.jsonc
-*.backup-agentteam-*
-
-# Local working records, never distribution sources.
 /.local-work/
+
+# Secrets
+.env
+.env.*
+*.key
+*.pem
+.DS_Store

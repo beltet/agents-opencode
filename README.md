@@ -1,238 +1,171 @@
-# OpenCode Agentteam
+# agents-opencode — Go rewrite (3.0.0-beta.1)
 
-**Ett AI-team för dina projekt i OpenCode — med guider för Windows och Linux.**
+**Manuell, projektlokal hantering av OpenCode-agentteam.** Den tidigare Python-installationsapplikationen har skrivits om från grunden i Go. **Användaren väljer alla agenter, modeller och behörigheter; programmet analyserar inte projektet och väljer ingenting automatiskt.** Orkestreraren anpassar uppgiftsfördelningen efter de installerade specialisterna.
 
-Verktyget hjälper dig att välja AI-assistenter med olika uppgifter, till exempel planering, programmering och granskning. Du behöver inte använda alla 23 specialister.
+> **Status: beta.** Källkoden har byggts och testats med Go på Linux. Windows/macOS kan korskompileras och testas i GitHub Actions, men ett faktiskt installerat OpenCode och anslutna modeller har **inte** testats i den här leveransmiljön. Granska och testa på en separat projektmapp innan du migrerar dina riktiga projekt.
 
-## Börja här / Start here
+**[Svensk steg-för-steg-guide](START_HAR.md)** · **[English getting started](START_HERE.md)** · [Säkerhetsbegränsningar](docs/SECURITY.md) · [GitHub-utbyte](docs/BYT_UT_GITHUB_PROJEKTET.md)
 
-**Ny användare? Följ guiden från början. Du behöver inte kunna Git-kommandon för att hämta paketet.**
+## Vad ingår?
 
-| Språk / Language | Steg-för-steg / Step by step |
-| --- | --- |
-| **Svenska** | **[Börja här: hämta, installera och använd](START_HAR.md)** |
-| **English** | **[Start here: download, install, and use](START_HERE.md)** |
+- En Go-binär (`agents-opencode`) utan Pythonberoende vid körning, med 23 inbäddade specialistprofiler som utgångspunkt.
+- Manuell agentlista, manuellt modellval per agent och valfri bulk-tilldelning. Modellnamn kan listas med `opencode models`, som hanteras av en separat installerad OpenCode.
+- En enkel projektbeskrivning i `PROJECT_BRIEF.md` som **orkestreraren** använder, inte installationsprogrammet.
+- Projektlokal manifest- och teamregistrering, OpenCode-konfiguration, instruktioner och behörighetspolicy.
+- Separata behörighetsfält för verktyg, Git, internet/domäner, lokala sökvägar, nätverksdiskar, USB och firmware samt per-agent-undantag.
+- Git-konfiguration: lokalt, befintligt repo eller remote, författare/e-post och SSH-port/adress. Ändringar av faktisk Git-konfiguration kräver ett separat, uttryckligen bekräftat `git-apply`.
+- Säkerhetskopior av ändrade filer, idempotent refresh, installerarens diagnostik och importer av äldre agentmanifest.
+- Körläge `run` eller `resume` startar separat installerad OpenCode.
+- Standardbiblioteket i Go; inga externa Go-paket.
 
-Guiderna visar vad du ska klicka på på GitHub, hur du packar upp filen, hur du öppnar ett kommandofönster och vilka kommandon du ska skriva. Både Windows och Linux finns med.
+## Krävs
 
-### Så går det till
+- **För att bygga:** Go 1.23 eller senare (under build, inte när binären körs).
+- **För att använda agenter:** OpenCode separat installerat och konfigurerat med dina modeller.
+- **För Git-funktioner:** Git samt fungerande SSH-klient/nycklar om SSH används.
 
-1. **Förbered datorn.** Installera Python och OpenCode separat och anslut OpenCode till en AI-modell. Guiderna länkar till respektive installationsanvisning. Modellanvändning kan kosta pengar.
-2. **Hämta paketet här på GitHub.** Gå till fliken **Code**, klicka på den gröna knappen **Code** och välj **Download ZIP**. Packa upp hela ZIP-filen innan du fortsätter.
-3. **Installera verktyget en gång.** Öppna den uppackade mappen som innehåller `install.cmd` och `install.sh`. Följ installationsstegen för ditt operativsystem i guiden.
-4. **Välj ditt projekt.** Öppna mappen med det du vill arbeta med — inte den uppackade installationsmappen. Guiden visar också hur du skapar en tom övningsmapp.
-5. **Ställ in teamet.** Välj assistenter, AI-modeller och vad de får göra. Börja försiktigt; godkänn inte alla standardval utan att läsa dem.
-6. **Starta och skriv din uppgift.** Be först teamet att läsa och förklara projektet utan att ändra något. Guiderna innehåller en färdig exempeluppgift.
+## Snabbstart på Linux/macOS
 
-**Viktigt:** Det här paketet installerar agentteamet, **inte OpenCode eller AI-modellerna**. Installationsmappen och din projektmapp är två olika saker. Börja med [den svenska guiden](START_HAR.md) om du är osäker.
+```bash
+# Kör i det här källkodsrepositoryt:
+go test ./...
+go build -o agents-opencode ./cmd/agents-opencode
 
-### English overview
+# Installera binären för din användare:
+mkdir -p "$HOME/.local/bin"
+cp agents-opencode "$HOME/.local/bin/agents-opencode"
 
-This tool adds an AI engineering team to an **existing OpenCode installation**. Follow the **[English beginner guide](START_HERE.md)** for Windows or Linux: prepare your computer → download the GitHub ZIP → extract it → install the tool once → configure your own project → start OpenCode and enter your first task. No Git commands are needed to download the ZIP. OpenCode, Python, model accounts, and authentication are set up separately; model use may incur charges.
-
----
-
-## Technical reference / Teknisk referens
-
-**The sections below are reference material, not extra steps required before following the beginner guide.**
-
-Portable installer v2.1.0 targets **OpenCode 1.x** (designed for v1.19.5). It includes 23 specialist profiles and shared team instructions in English; the manager UI is available in Swedish and English. No model IDs, API keys, providers, or user-specific paths are preconfigured.
-
-### Installation reference
-
-From the extracted package folder, run `.\install.cmd` in Windows PowerShell or `bash install.sh` on Linux. Choose Swedish or English when prompted, or append `--lang sv` / `--lang en`. The installer uses Python 3.10+ and its standard library; no administrator/root privileges, Python packages, or network connection are needed for this copy step. Linux requires Bash. OpenCode has its own requirements; this installer does not install or validate Git Bash for Windows.
-
-- **Windows:** the default launcher is `%LOCALAPPDATA%\agents-opencode\bin\agents-opencode.cmd`. Installation adds its directory to the current user's PATH, preserving existing entries and avoiding duplicates. Append `--no-path` to opt out. Open a new terminal afterwards; restart Windows Terminal/your IDE if necessary. If PATH registration fails, the installed launcher can still be used. In PowerShell: `& "$env:LOCALAPPDATA\agents-opencode\bin\agents-opencode.cmd" install --lang en`.
-- **Linux:** the default launcher is `~/.local/bin/agents-opencode`; central files are under `${XDG_DATA_HOME:-$HOME/.local/share}/agents-opencode/`. `XDG_BIN_HOME` can override the launcher directory. The installer **does not update PATH**. Use `"$HOME/.local/bin/agents-opencode" install --lang en` with the default location, or add the command directory to PATH yourself.
-
-Run project configuration from your **own project folder**, then use `agents-opencode run` to start OpenCode there. If the command is not on PATH, use the full launcher path above for `run`, `resume`, and other commands too. If selected, orchestrator is the default agent; no extra activation command is needed. Restart OpenCode after configuration changes.
-
-Git is useful for project version history and is required if you accept the wizard's offer to run `git init`; it is not needed to download the ZIP or copy-install this tool. Model discovery uses the separately installed `opencode models` command and may access the network. A listed model does not certify successful authentication or model capabilities.
-
-## Sharing the installer
-
-Share the **complete curated source archive** (for example, the GitHub repository's **Code → Download ZIP** archive). It must contain the platform entry points, `lib/`, profiles, and documentation. Do not share a locally installed manager directory or generated project configuration as though it were the installer. User-specific files such as `opencode.json`, `AGENTS.md`, `PROJECT_POLICY.md`, `AGENT_ACCESS_POLICY.json`, and `.opencode/` are generated/configured locally and are not part of the curated distribution. There is no separate release ZIP/binary unless one is explicitly published in the future.
-
-The optional `AGENT_CAST.md` is a fictional, lightly comic presentation of the 23 roles—not real people, identities, or relationships. It does not alter role instructions, authority, or behavior; humor is optional. A handoff may use at most one brief, relevant light phrase in an existing field, subject to the tone and safety limits in `lib/TEAM_RULES.md`.
-
-## Project setup
-
-From your project directory, run `agents-opencode` on Linux or `agents-opencode.cmd` on Windows, then choose **1 – Install / configure**. Use the full installed launcher path if the command is not on PATH. In Windows CMD, change directory with `cd /d "C:\path\to\project"`; in PowerShell, use `Set-Location 'C:\path\to\project'`. You may also pass a quoted project path to the command.
-
-The wizard:
-
-1. Lets you choose all agents, the suggested core three, or a list/range of agent numbers. User-created roles can extend the list.
-2. Runs the separately installed OpenCode command `opencode models` and shows its available model list for each selected agent. Choose a listed model, reuse the previous selection, inherit the caller's model, or keep an existing assignment where applicable. No model is preset. For `image-analyst`, select a model that supports image input.
-3. Asks whether the project is PRIVATE, SHAREABLE, or HYBRID. PRIVATE requires you to verify that chosen endpoints are local; the tool cannot detect whether an alias or proxy forwards data to the cloud.
-4. Offers permission presets and asks you to review individual permissions. You can separately configure mounted shares and path/network rules.
-5. Shows a summary and asks for confirmation before writing project files.
-
-The installer may offer to initialize a project as a Git repository. Existing project files that it changes are backed up. This does not mean every global or parent OpenCode configuration has been inspected; review your setup and backups.
-
-### Project-local teams only
-
-Agent profiles, team instructions, role/model assignments and permissions are
-installed in the selected project, never as a shared active team in your home
-directory or OpenCode's global configuration. The manager rejects those locations
-and managed paths that resolve outside the selected project through symlinks.
-The centrally installed `agents-opencode` tool stores reusable **source templates**;
-these are not active global agents and are not loaded by OpenCode as project roles.
-
-Each project can select different roles, models, permissions and profile contents.
-Editing a project's `.opencode/agents/*.md` affects that project only. An explicit
-`refresh` replaces its managed profiles with the current templates and backs up
-local edits first; it does not update other projects. A tool/package update alone
-does not refresh existing project teams. OpenCode's own unrelated global settings
-and built-in agents continue to work normally.
-
-## Manager commands
-
-Commands accept an optional project path. On Windows, use the `.cmd` launcher; the launcher can be invoked from the extracted folder or the installed location above. Language flags may be given anywhere on the command line, for example `agents-opencode.cmd status C:\work\project --lang sv`.
-
-| Action | Command |
-| --- | --- |
-| Install, migrate, or configure a project | `agents-opencode install` |
-| Refresh installed profiles/workflow, preserving project choices | `agents-opencode refresh` |
-| Reassign selected models | `agents-opencode models-all` |
-| Add/remove installed roles | `agents-opencode agents` |
-| Edit permission choices | `agents-opencode permissions` |
-| Edit path and network rules | `agents-opencode access` |
-| Synchronize manually edited access policy | `agents-opencode sync-access` |
-| Show project status | `agents-opencode status` |
-| Create a reusable custom English agent | `agents-opencode add-agent` |
-| Start OpenCode / continue latest session | `agents-opencode run` / `agents-opencode resume` |
-| List available models | `agents-opencode list-models` |
-
-The management UI language is selected per run; it is not a translation of generated agent profiles or project instructions, which remain English.
-
-## Persistent delivery and team updates
-
-The maintained behavior sources are `lib/profiles/*.md`, `lib/TEAM_RULES.md`,
-`lib/WORKFLOW.md` and `lib/HANDOFF_TEMPLATE.md`. These are versioned in this
-repository; generated project installations remain local. Use the same source
-revision on each computer when consistent team behavior is required.
-
-All 23 packaged profiles omit `steps`. The primary follows an
-**implement → verify → integrate → continue** cycle over the user's approved
-queue. Checkpoints, commits, version boundaries and specialist handoffs are not
-stopping conditions. Routine implementation decisions, build fixes and regression
-checks are autonomous within approved scope. The shared decision table reserves
-changed product direction, substantial redesign, new cost commitments and exceeded
-explicit limits for the owner. Blocked items do not suspend independent work.
-Commit/push still requires explicit authorization.
-
-The primary coordinates specialist delegation; the workflow does not depend on
-nested agent calls or increased delegation depth. Failed or truncated specialist
-work is inspected and recovered/reassigned. Alternative providers must already be
-configured and authorized; no fallback provider or spending authority is invented.
-Keep a short active state/queue in the project's designated local work area
-(normally `.local-work/ACTIVE.md`) with acceptance criteria, blockers, test evidence
-and the exact next action. Read historical decisions selectively, preserving any
-explicit project-required reads and actual user review gates.
-
-To update an **already configured project**, first install this updated package
-with `bash install.sh` (Linux) or `.\install.cmd` (Windows). Then run:
-
-```sh
-agents-opencode refresh "/path/to/project"
+# Gå till en annan projektmapp (den du vill bygga):
+mkdir -p "$HOME/projekt/testprojekt"
+cd "$HOME/projekt/testprojekt"
+"$HOME/.local/bin/agents-opencode" install
 ```
 
-On Windows use `agents-opencode.cmd refresh "C:\path\to\project"`.
-The source-tree launcher can also run `refresh` directly. Menu option **12** is
-equivalent. This command uses the existing manifest's selected roles and updates
-their profiles, shared rules and the managed section of `AGENTS.md`. It removes
-old inline `steps`/legacy `maxSteps` overrides for those roles, preserving model
-choices, providers, permissions, access policy, project policy, custom unselected
-agents, active memory and instructions outside the managed section. Changed files
-are backed up; local edits inside managed profiles are replaced. Missing profile
-sources cause a preflight error, so retain any custom source profiles. Projects
-without a manifest need the normal `install` wizard first.
+Du väljer agenter och modell-ID:n manuellt i guiden. Ange modell-ID exakt så som OpenCode visar (t.ex. via `opencode models`). Vissa modeller kan vara listade trots saknad inloggning. Inga betalmodeller väljs automatiskt. Välj gärna en *testmapp* första gången.
 
-**Quit and restart OpenCode after updating.** Use `opencode debug agent orchestrator`
-to inspect the resolved profile in your installed OpenCode version, including
-possible global/parent overrides. **Omitting `steps` in a project profile does not
-clear an inherited cap from another configuration layer.** In particular, older
-profiles in `~/.opencode/agents/` can still supply step caps in OpenCode 1.19.5;
-also inspect global agents/config under `~/.config/opencode/`. The project refresh
-command does not modify these other installations. Update their maintained sources
-and refresh them separately, or explicitly reconcile the obsolete cap in its
-owning configuration before claiming the active agent is uncapped.
-No explicit step cap does not remove model quota,
-context or runtime limits, and these instructions cannot restart an ended session.
-Verify continuation on a real approved multi-item task and use actual session/log
-evidence to investigate any unexpected stop; installer tests alone cannot prove
-the model will continue correctly in every run.
+Starta OpenCode i samma projekt:
 
-## Permissions and security
-
-The project wizard configures OpenCode 1.x permissions (`permission`, `bash`, `task`, `agent`). **Do not use this generated format with OpenCode v2**, which uses a different configuration format.
-
-You may set shell commands, file edits, Git push, internet-related tools, access outside the project, secrets, MCP/external services, package installation, hardware tools, and unattended launch to allow, ask, or deny. These settings are best-effort OpenCode tool permissions and agent behavior instructions—not a firewall, filesystem sandbox, or OS security boundary. Allowed shell commands and programs can access resources available to the host account and may bypass tool-level patterns. `--auto` approves `ask`; use `deny` for actions that must remain blocked. Real isolation requires OS-level controls such as a VM/container, restricted mounts, and network filtering.
-
-The per-project `AGENT_ACCESS_POLICY.json` is an editable policy description. Its helper checks are advisory; configured model-provider traffic is separate from agent-initiated network requests. Read the detailed cautions below before using broad permissions or unattended mode.
-
-## Per-project access policy
-
-At first install, the wizard writes `AGENT_ACCESS_POLICY.json`. The project root is allowed for project work; outside paths default according to the selected permission profile. More specific path rules can allow or deny local folders and mounted shares. Network rules use hostnames, schemes, and optional ports. This policy and its generated instructions are **not a security sandbox**.
-
-```json
-{
-  "version": 1,
-  "advisory_only": true,
-  "project_root": "C:\\work\\example",
-  "filesystem": {
-    "default_outside": {"read": "deny", "write": "deny"},
-    "paths": [
-      {"path": "D:\\team-documents", "kind": "network-share", "read": "allow", "write": "deny"}
-    ]
-  },
-  "network": {
-    "default": "deny",
-    "hosts": [{"scheme": "https", "host": "docs.example.org", "access": "allow"}]
-  }
-}
+```bash
+agents-opencode status
+agents-opencode doctor
+agents-opencode run
+# Fortsätt en tidigare OpenCode-session:
+agents-opencode resume
 ```
 
-This is illustrative only; the wizard generates a project-specific file. Use `agents-opencode access` to edit it interactively. After manual JSON edits, run `agents-opencode sync-access` and restart OpenCode. The access-check and access-fetch helper examples in generated project instructions use Python; on Windows, use the Python launcher available on your system (for example `py -3`).
+Om `~/.local/bin` inte ligger på PATH, använd den fullständiga sökvägen.
 
-OpenCode 1.x cannot restrict `webfetch` to individual hostnames. With configured host rules, the generated permissions disable unrestricted web fetch/search and provide an allowlisted GET helper. That helper is still not a firewall: shell programs, plugins, symlinks, and subprocesses may bypass the policy. Provider/model API traffic is handled separately. For enforced restrictions, use OS/VM/container isolation and network controls.
+## Snabbstart Windows (PowerShell)
 
-## Files written in a configured project
+```powershell
+go test ./...
+go build -o agents-opencode.exe ./cmd/agents-opencode
+New-Item -ItemType Directory -Force "$env:LOCALAPPDATA\agents-opencode" | Out-Null
+Copy-Item .\agents-opencode.exe "$env:LOCALAPPDATA\agents-opencode\agents-opencode.exe"
+New-Item -ItemType Directory -Force "$HOME\Projects\TestProjekt" | Out-Null
+Set-Location "$HOME\Projects\TestProjekt"
+& "$env:LOCALAPPDATA\agents-opencode\agents-opencode.exe" install
+```
 
-The manager writes or updates `AGENTS.md`, `PROJECT_POLICY.md`, `AGENT_ACCESS_POLICY.json`, and `opencode.json`, and creates `.opencode/` containing the selected agent profiles, team instructions, a manifest, and policy helper tools. It backs up files that it changes. It merges the ordinary JSON object in `opencode.json`; it does not support commented JSONC (`opencode.jsonc`) as input. Existing unrelated/global settings and parent configuration should be reviewed separately.
+Starta om terminalen om du ändrar PATH. Binären installerar inte OpenCode, Git eller SSH åt dig.
 
-## Custom agents and tests
+## Kommandon
 
-Custom English agent profiles are kept in the user's central manager data directory and can be copied to another user's custom-profile directory or included in a separately curated archive. On Windows, central install data is under `%LOCALAPPDATA%\agents-opencode`; on Linux it is under the XDG data directory or `~/.local/share/agents-opencode`.
+| Kommando | Funktion |
+|---|---|
+| `agents-opencode` | Enkel huvudmeny |
+| `install [mapp]` / `configure` | Skapa eller ändra projektteam interaktivt |
+| `agents` | Välj installerade agentroller manuellt |
+| `models` | Välj modell per agent manuellt |
+| `list-models` | Visa modell-ID:n från `opencode models` |
+| `catalog` | Visa de 23 inbyggda rollerna |
+| `permissions` / `access` / `hardware` | Behörighetsinställningar |
+| `git` | Spara Git/SSH-intentioner i projektkonfigurationen |
+| `git-apply` | Begär bekräftelse och tillämpa begränsade `git config` / `git remote add`-ändringar |
+| `status` | Visa valda roller, modeller och projektläge |
+| `doctor` / `audit` | Konfigurationskontroller och säkerhetsvarningar |
+| `refresh` | Förnya genererade filer, med förhandsvisning och backup |
+| `migrate` | Läs äldre `.opencode/agentteam-manifest.json`, importera roller/modeller |
+| `backup` | Skapa manuell projektbackup |
+| `restore --from=<katalog>` | Återställ en tidigare managerbackup efter bekräftelse |
+| `run` / `resume` | Starta OpenCode / återuppta session |
+| `version` | Visa manager-version |
 
-**Verification status:** the repository includes Python and platform-specific tests. Linux checks have been run, but native Windows installation and end-to-end use have not been verified here; some Windows-specific tests are skipped on Linux. OpenCode behavior and model availability depend on the separately installed local version and providers. No model capability or remote endpoint is certified by this installer.
+Ange en projektmapp som sista argument eller `--project=/sökväg/till/projekt`. Flaggan `--dry-run` visar ändringar utan att skriva dem. `--lang=sv` / `--lang=en` är reserverade för språkinställning; den nuvarande betaversionens interaktiva menyer är främst på engelska.
 
-## Developing this repository: curated Git boundary
+### Egna agenter
 
-This repository can install its own agents without versioning that local
-installation. Maintain distributed profiles in `lib/profiles/`, shared
-templates and installer logic in `lib/`, and regression tests in `tests/`.
-The entry points, `.gitignore` and deliberately maintained product documentation
-(such as this README and `START_HAR.md`) also belong in Git.
+Skapa `.agents-opencode/custom/min-agent.md` i projektet. Skriv instruktioner på engelska och välj `min-agent` som namn i agentlistan. Installeraren kopierar dess instruktioner till `.opencode/agents/`. Egna agenters exakta instruktioner och modeller väljs av användaren.
 
-The root `.gitignore` excludes `.opencode/`, generated root configuration
-(`AGENTS.md`, `PROJECT_POLICY.md`, `AGENT_ACCESS_POLICY.json`, `opencode.json`
-and `opencode.jsonc`), installer backups and `.local-work/`. Put working notes,
-logs, decisions, handoffs and checkpoints in `.local-work/`; do not distribute
-them as product documentation. New files elsewhere require explicit review.
-These rules apply to this development repository, not automatically to projects
-configured by the installer. Ignoring files does not restrict model access.
+## Genererade filer i ett projekt
 
-**First check at every task start or resumption:** inspect `git status --short
---untracked-files=normal`, `git ls-files`, `git ls-files -ci --exclude-standard`
-and `git diff --cached --name-status`. Confirm local artifacts are ignored with
-`git check-ignore`. If local artifacts are tracked or staged, stop and resolve
-the discrepancy without deleting user files. Ignore rules do not untrack files
-already in Git, and can be bypassed with `git add -f`.
+```text
+PROJECT_BRIEF.md                   # Beställarens projektbeskrivning
+AGENTS.md                          # Ett avgränsat, managergenererat avsnitt
+AGENT_ACCESS_POLICY.json          # Användarens avsikter och policy
+opencode.json                      # Projektets OpenCode-inställningar (befintliga övriga nycklar bevaras)
+.agents-opencode/
+  config.json                      # Managerens projektkonfiguration
+  TEAM_REGISTRY.md                 # Installerade agentroller och manuella modellval
+  backups/<UTC-tid>/               # Säkerhetskopior före ändring
+  custom/*.md                      # Valfria egna agentmallar
+.opencode/
+  agents/*.md                      # Endast valda profiler
+  team/*.md                        # Gemensamma arbetsregler
+```
 
-The ignored local `AGENTS.md` repeats this instruction **outside** the managed
-markers, where reinstallation preserves it. On a fresh clone, add that local
-instruction when setting up the development agents; it is intentionally not
-shipped as part of the installed agent profiles. Before an authorized commit,
-review the staged diff and stage only explicit curated paths, never `git add .`
-or `git add -A`.
+Användarägda delar av `AGENTS.md` och orelaterade nycklar i giltig `opencode.json` bevaras. Filer med kommentarer (`JSONC`) i `opencode.json` avvisas i betaversionen i stället för att skrivas över. **Backuper läggs lokalt i projektet.** Granska deras Git-status innan du publicerar något.
+
+### Behörigheter — viktigt att känna till
+
+Det här programmet är **inte en säkerhetssandbox**. OpenCode kan tillämpa verktygsbehörigheter, men tillåten `bash`, `ssh`, shell-skript, plugins och underprocesser kan kringgå vissa avsiktsbaserade begränsningar. URL-/domänlistor, USB-ID:n, nätverksdiskar, firmware och remote-/grenbegränsningar finns i policyfilen för agenternas instruktioner men genomdriver **inte** en värdsystembaserad åtkomstkontroll. Firmware-kommandon spärras konservativt via kända kommandomönster. För verklig isolering behövs användarkonton/ACL, VM/container, brandvägg, SSH-serverns rättigheter och/eller hårdvarubegränsningar. Se [docs/SECURITY.md](docs/SECURITY.md).
+
+`--auto` vid `Unattended` kan godkänna `ask` automatiskt. Sätt `deny` för det som **måste** förbli otillåtet. En Git-push-behörighet i ett verktygsfilter är aldrig en garanti att kommandot inte kan riktas mot en annan remote via en alternativ shellväg.
+
+## Git och SSH
+
+För egen SSH-port, använd en fullständig remote-URL, exempelvis:
+
+```text
+ssh://git@192.0.2.10:2222/team/myproject.git
+```
+
+`git`-menyn sparar en *avsedd konfiguration*. Kör `agents-opencode git-apply` separat för att göra godkända lokala ändringar. `git-apply` ändrar inte SSH-nycklar, host key verifiering, serverinställningar, befintliga remoters URL:er eller Git-branch som standard. Det gör inga pushar. Kommandot `git push` behöver alltid godkännas inom projektets regler.
+
+## Befintliga projekt / migrering
+
+**Testa på en kopia först.** Om ett projekt har gammalt `.opencode/agentteam-manifest.json`, välj `agents-opencode migrate`. Importen läser de 23 agentnamnen och nuvarande modellval, men använder konservativa behörighetsstandarder i stället för att ärva alltför öppna gamla rättigheter. Du får en förhandsvisning innan ändring. Befintliga projektfiler som ändras backas upp.
+
+Den här omskrivningen av managerprogrammet ändrar **inte** användarens Git-repository eller gamla projekt automatiskt. Varje projekt uppdateras bara när du kör ett uttryckligt kommando i den projektmappen.
+
+## Testning och byggen
+
+```bash
+go test ./...
+go vet ./...
+go build ./cmd/agents-opencode
+```
+
+Bygg för andra operativsystem (korskompilering, inte samma sak som körtest):
+
+```bash
+GOOS=windows GOARCH=amd64 go build -o agents-opencode-windows-amd64.exe ./cmd/agents-opencode
+GOOS=darwin GOARCH=arm64 go build -o agents-opencode-macos-arm64 ./cmd/agents-opencode
+GOOS=linux GOARCH=arm64 go build -o agents-opencode-linux-arm64 ./cmd/agents-opencode
+```
+
+GitHub Actions testar Go-kod på Windows, Linux och macOS och skapar artefakter/releaser via `.github/workflows/` när repositoryt har pushats. **Säg inte att OpenCode-integration fungerar förrän den testats med verklig installation och modell.**
+
+## Nuvarande begränsningar i betaversionen
+
+1. Ingen Live/OpenCode-integrationstestning har utförts här (ingen installerad OpenCode i byggmiljön).
+2. Primär JSON-kodgenerering följer dokumenterat OpenCode **1.x**-schema. Okända framtida format och 2.x verifieras inte automatiskt och ska inte antas vara kompatibla.
+3. Interaktiva menyer är för närvarande huvudsakligen på engelska, trots att svensk dokumentation finns.
+4. Försöker inte implementera en OS-brandvägg, USB-policy enforcement eller fullständig shell-sandbox.
+5. Git `SSHIdentity` lagras bara som sökvägsmetadata; SSH-config/agent hanteras separat.
+6. Interaktiv guide är textbaserad och inte en fullskalig grafisk TUI. Ingen modellbenchmark, automatisk projektanalys eller modelldispatch ingår avsiktligt.
+7. Installeraren gör backup men har inte full transaktionell rollback över en hel uppsättning filer vid strömavbrott mitt i installation; tidigare filer kan återställas från backup.
+
+## Licens
+
+Bevara den licens som gäller för originalprojektet om en sådan finns; denna leverans tilldelar ingen ny licens åt tredjeparts- eller tidigare projektmaterial.
