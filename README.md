@@ -1,171 +1,137 @@
-# agents-opencode — Go rewrite (3.0.0-beta.1)
+# Agents OpenCode GUI
 
-**Manuell, projektlokal hantering av OpenCode-agentteam.** Den tidigare Python-installationsapplikationen har skrivits om från grunden i Go. **Användaren väljer alla agenter, modeller och behörigheter; programmet analyserar inte projektet och väljer ingenting automatiskt.** Orkestreraren anpassar uppgiftsfördelningen efter de installerade specialisterna.
+**En liten grafisk skrivbordsapplikation för att installera och konfigurera OpenCode-agentteam.**
 
-> **Status: beta.** Källkoden har byggts och testats med Go på Linux. Windows/macOS kan korskompileras och testas i GitHub Actions, men ett faktiskt installerat OpenCode och anslutna modeller har **inte** testats i den här leveransmiljön. Granska och testa på en separat projektmapp innan du migrerar dina riktiga projekt.
+En ny C++20/Qt 6 Widgets-implementering. Inga terminalmenyer, ingen webbläsare, ingen lokal webbtjänst och inget Go/Python-körberoende. Programmet analyserar inte projektet, rekommenderar inte agenter och väljer inte AI-modeller åt dig.
 
-**[Svensk steg-för-steg-guide](START_HAR.md)** · **[English getting started](START_HERE.md)** · [Säkerhetsbegränsningar](docs/SECURITY.md) · [GitHub-utbyte](docs/BYT_UT_GITHUB_PROJEKTET.md)
+> **Status: 3.1.0-beta.1 / källkodsprototyp.** GUI-källkoden och automatiska projektkonfigurationstester ingår. Qt-utvecklingsmiljön finns inte i leveranscontainern, så Qt-versionen har **inte kunnat kompileras eller körtestas här**. GitHub Actions bygg-/testflöde med paketering för Windows, Linux och macOS ingår men ska verifieras när du pushat. Testa alltid i en separat projektmapp först. De tidigare Go-binärerna är inte denna GUI-version.
 
-## Vad ingår?
+## Hur ser programmet ut?
 
-- En Go-binär (`agents-opencode`) utan Pythonberoende vid körning, med 23 inbäddade specialistprofiler som utgångspunkt.
-- Manuell agentlista, manuellt modellval per agent och valfri bulk-tilldelning. Modellnamn kan listas med `opencode models`, som hanteras av en separat installerad OpenCode.
-- En enkel projektbeskrivning i `PROJECT_BRIEF.md` som **orkestreraren** använder, inte installationsprogrammet.
-- Projektlokal manifest- och teamregistrering, OpenCode-konfiguration, instruktioner och behörighetspolicy.
-- Separata behörighetsfält för verktyg, Git, internet/domäner, lokala sökvägar, nätverksdiskar, USB och firmware samt per-agent-undantag.
-- Git-konfiguration: lokalt, befintligt repo eller remote, författare/e-post och SSH-port/adress. Ändringar av faktisk Git-konfiguration kräver ett separat, uttryckligen bekräftat `git-apply`.
-- Säkerhetskopior av ändrade filer, idempotent refresh, installerarens diagnostik och importer av äldre agentmanifest.
-- Körläge `run` eller `resume` startar separat installerad OpenCode.
-- Standardbiblioteket i Go; inga externa Go-paket.
+Ett normalt skrivbordsfönster med fem flikar:
 
-## Krävs
+1. **Projekt:** välj en mapp och skriv projektbeskrivningen.
+2. **Agenter och modeller:** bocka i vilka av 23 agentroller du vill ha, välj modell per agent i redigerbara listor. Hämta modell-ID:n från `opencode models` om tillgängligt. Bulkmodellval finns.
+3. **Behörigheter:** välj Tillåt / Fråga / Neka för verktyg och Git, ange tillåtna eller spärrade internetadresser, lokala sökvägar, nätverksdiskar, USB-enheter och firmwareåtkomst. Även enkla per-agent-undantag.
+4. **Git / SSH:** lokal Git eller remote, SSH-värd och port, SSH-användare, referens till privat nyckel, repository, författarnamn och e-post. Separat knapp för att *efter bekräftelse* göra godkända lokala Git-ändringar.
+5. **Förhandsgranska:** se genererad OpenCode-konfiguration före installation.
 
-- **För att bygga:** Go 1.23 eller senare (under build, inte när binären körs).
-- **För att använda agenter:** OpenCode separat installerat och konfigurerat med dina modeller.
-- **För Git-funktioner:** Git samt fungerande SSH-klient/nycklar om SSH används.
+**Spara och installera agentteam** skriver projektfilerna och säkerhetskopierar befintliga hanterade filer. Programmet utför aldrig `git push` automatiskt.
 
-## Snabbstart på Linux/macOS
+### För vilka OpenCode-versioner?
+
+Denna beta genererar det dokumenterade **OpenCode 1.x-konfigurationsformatet** (`agent`, `permission`, `bash`, `task`). Den stoppar installation vid detekterad OpenCode 2.x och nekar att skriva över en identifierad V2-konfiguration. V2 kräver en separat adapter och är *inte* implementerad ännu.
+
+## Kom igång med färdiga binärer från GitHub
+
+När källkoden finns på GitHub och Actions-byggena fungerar hittar du automatiskt skapade filer här:
+
+- **Actions → Build GUI binaries → senaste lyckade körning → Artifacts.** Finns på push till `main` och på manuella arbetsflödeskörningar.
+- **Releases** efter att du har pushat en versionstagg som börjar med `v`, exempelvis `v3.1.0-beta.1`.
+
+De avsedda releaseformaten är:
+
+| Operativsystem | Paket | Användning |
+|---|---|---|
+| Linux x86_64 | `.AppImage` | Gör körbar, dubbelklicka |
+| Windows x86_64 | `.zip` med `.exe` och Qt-bibliotek | Packa upp och starta `.exe` |
+| macOS Intel | `.dmg` med `.app` | Öppna `.dmg`, flytta appen till Applications |
+| macOS Apple Silicon | `.dmg` med `.app` | Samma som ovan |
+
+**OBS:** Dessa binärer finns inte automatiskt på GitHub innan koden har pushats och GitHub Actions har byggt dem. Osignerade Windows- och macOS-program kan utlösa plattformarnas säkerhetsvarningar. Linux AppImage kräver en kompatibel Linuxmiljö och kan kräva `libfuse2`/FUSE-stöd på vissa distributioner.
+
+## Bygga från källkod
+
+Du behöver Git, CMake 3.21+, en C++20-kompilator samt Qt **6.5+** (Core, Widgets och Test). CMake bygger två program: skrivbordsapplikationen och automatiska tester.
+
+### Fedora (inklusive utvecklingsmaskinen)
 
 ```bash
-# Kör i det här källkodsrepositoryt:
-go test ./...
-go build -o agents-opencode ./cmd/agents-opencode
-
-# Installera binären för din användare:
-mkdir -p "$HOME/.local/bin"
-cp agents-opencode "$HOME/.local/bin/agents-opencode"
-
-# Gå till en annan projektmapp (den du vill bygga):
-mkdir -p "$HOME/projekt/testprojekt"
-cd "$HOME/projekt/testprojekt"
-"$HOME/.local/bin/agents-opencode" install
+sudo dnf install cmake ninja-build gcc-c++ qt6-qtbase-devel git
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel "$(nproc)"
+ctest --test-dir build --output-on-failure
+./build/agents-opencode
 ```
 
-Du väljer agenter och modell-ID:n manuellt i guiden. Ange modell-ID exakt så som OpenCode visar (t.ex. via `opencode models`). Vissa modeller kan vara listade trots saknad inloggning. Inga betalmodeller väljs automatiskt. Välj gärna en *testmapp* första gången.
-
-Starta OpenCode i samma projekt:
+### CachyOS / Arch Linux
 
 ```bash
-agents-opencode status
-agents-opencode doctor
-agents-opencode run
-# Fortsätt en tidigare OpenCode-session:
-agents-opencode resume
+sudo pacman -S --needed cmake ninja gcc qt6-base git
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel "$(nproc)"
+ctest --test-dir build --output-on-failure
+./build/agents-opencode
 ```
 
-Om `~/.local/bin` inte ligger på PATH, använd den fullständiga sökvägen.
+### Windows
 
-## Snabbstart Windows (PowerShell)
+Installera Qt 6 (inklusive Qt Widgets och den kit som matchar MSVC), CMake och Visual Studio 2022 C++ build tools. Öppna en terminal med korrekt byggmiljö, eller använd **Qt Creator**, öppna `CMakeLists.txt`, välj Qt 6 kit och tryck Build/Run. För ett delbart paket används `windeployqt` (GitHub Actions sköter detta automatiskt).
 
-```powershell
-go test ./...
-go build -o agents-opencode.exe ./cmd/agents-opencode
-New-Item -ItemType Directory -Force "$env:LOCALAPPDATA\agents-opencode" | Out-Null
-Copy-Item .\agents-opencode.exe "$env:LOCALAPPDATA\agents-opencode\agents-opencode.exe"
-New-Item -ItemType Directory -Force "$HOME\Projects\TestProjekt" | Out-Null
-Set-Location "$HOME\Projects\TestProjekt"
-& "$env:LOCALAPPDATA\agents-opencode\agents-opencode.exe" install
+### macOS
+
+Installera Xcode Command Line Tools, CMake och Qt 6. Öppna projektet i Qt Creator och bygg det, eller kör:
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
+ctest --test-dir build --output-on-failure
+open build/agents-opencode.app
 ```
 
-Starta om terminalen om du ändrar PATH. Binären installerar inte OpenCode, Git eller SSH åt dig.
+GitHub Actions använder `macdeployqt` för att skapa delbara `.dmg`-paket.
 
-## Kommandon
+## Så använder du GUI:t
 
-| Kommando | Funktion |
-|---|---|
-| `agents-opencode` | Enkel huvudmeny |
-| `install [mapp]` / `configure` | Skapa eller ändra projektteam interaktivt |
-| `agents` | Välj installerade agentroller manuellt |
-| `models` | Välj modell per agent manuellt |
-| `list-models` | Visa modell-ID:n från `opencode models` |
-| `catalog` | Visa de 23 inbyggda rollerna |
-| `permissions` / `access` / `hardware` | Behörighetsinställningar |
-| `git` | Spara Git/SSH-intentioner i projektkonfigurationen |
-| `git-apply` | Begär bekräftelse och tillämpa begränsade `git config` / `git remote add`-ändringar |
-| `status` | Visa valda roller, modeller och projektläge |
-| `doctor` / `audit` | Konfigurationskontroller och säkerhetsvarningar |
-| `refresh` | Förnya genererade filer, med förhandsvisning och backup |
-| `migrate` | Läs äldre `.opencode/agentteam-manifest.json`, importera roller/modeller |
-| `backup` | Skapa manuell projektbackup |
-| `restore --from=<katalog>` | Återställ en tidigare managerbackup efter bekräftelse |
-| `run` / `resume` | Starta OpenCode / återuppta session |
-| `version` | Visa manager-version |
+1. Öppna applikationen och välj den projektmapp där du senare kör OpenCode.
+2. Gå till **Projekt** och beskriv vad du vill att agenterna ska utveckla.
+3. Under **Agenter och modeller**, välj dina experter och ange exakt modell-ID (`provider/model`). Orkestreraren krävs. Ingen AI-tjänst kontaktas bara för att konfigurera teamet, med undantag av frivillig lokal `opencode models`-hämtning.
+4. Konfigurera behörigheter. Lämna `USB` och `Firmwareflashning` på **Neka** tills du verkligen behöver dem.
+5. Välj Git-läge, adress, SSH-port, identitet och författare. Behåll dina befintliga SSH-nycklar. Den privata nyckeln kopieras inte av programmet.
+6. Klicka på **Visa ändringar**, läs igenom, och klicka sedan **Spara och installera agentteam**.
+7. Vill du tillämpa lokala Git-inställningar, använd knappen på Git-fliken. Inget pushas.
+8. Öppna en terminal **i projektmappen** och starta `opencode` som vanligt. Orkestreraren läser `PROJECT_BRIEF.md` och teamregistret.
 
-Ange en projektmapp som sista argument eller `--project=/sökväg/till/projekt`. Flaggan `--dry-run` visar ändringar utan att skriva dem. `--lang=sv` / `--lang=en` är reserverade för språkinställning; den nuvarande betaversionens interaktiva menyer är främst på engelska.
-
-### Egna agenter
-
-Skapa `.agents-opencode/custom/min-agent.md` i projektet. Skriv instruktioner på engelska och välj `min-agent` som namn i agentlistan. Installeraren kopierar dess instruktioner till `.opencode/agents/`. Egna agenters exakta instruktioner och modeller väljs av användaren.
-
-## Genererade filer i ett projekt
+### Skapade filer
 
 ```text
-PROJECT_BRIEF.md                   # Beställarens projektbeskrivning
-AGENTS.md                          # Ett avgränsat, managergenererat avsnitt
-AGENT_ACCESS_POLICY.json          # Användarens avsikter och policy
-opencode.json                      # Projektets OpenCode-inställningar (befintliga övriga nycklar bevaras)
+PROJECT_BRIEF.md                Projektbeskrivning som orkestreraren läser
+AGENTS.md                       Ett avgränsat, automatiskt teamavsnitt
+opencode.json                   OpenCode 1.x-agentinställningar
+AGENT_ACCESS_POLICY.json       Avsiktsregler för åtkomst och hårdvara
 .agents-opencode/
-  config.json                      # Managerens projektkonfiguration
-  TEAM_REGISTRY.md                 # Installerade agentroller och manuella modellval
-  backups/<UTC-tid>/               # Säkerhetskopior före ändring
-  custom/*.md                      # Valfria egna agentmallar
+  config.json                   Projektets valda agenter, modeller, regler, Git
+  TEAM_REGISTRY.md              Inventering för orkestreraren
+  backups/...                   Kopior av tidigare hanterade filer
 .opencode/
-  agents/*.md                      # Endast valda profiler
-  team/*.md                        # Gemensamma arbetsregler
+  agents/*.md                   Valda specialistprofiler
+  team/*.md                     Gemensamma arbets- och säkerhetsregler
 ```
 
-Användarägda delar av `AGENTS.md` och orelaterade nycklar i giltig `opencode.json` bevaras. Filer med kommentarer (`JSONC`) i `opencode.json` avvisas i betaversionen i stället för att skrivas över. **Backuper läggs lokalt i projektet.** Granska deras Git-status innan du publicerar något.
+Den inbyggda orkestreraren kontrollerar det faktiska teamet vid start/återupptagning och ska logga sitt uppdrag och kompetensluckor i `.local-work/ACTIVE.md`. Installationsprogrammet gör ingen automatisk projektanalys.
 
-### Behörigheter — viktigt att känna till
+## Viktigt om säkerhet och behörigheter
 
-Det här programmet är **inte en säkerhetssandbox**. OpenCode kan tillämpa verktygsbehörigheter, men tillåten `bash`, `ssh`, shell-skript, plugins och underprocesser kan kringgå vissa avsiktsbaserade begränsningar. URL-/domänlistor, USB-ID:n, nätverksdiskar, firmware och remote-/grenbegränsningar finns i policyfilen för agenternas instruktioner men genomdriver **inte** en värdsystembaserad åtkomstkontroll. Firmware-kommandon spärras konservativt via kända kommandomönster. För verklig isolering behövs användarkonton/ACL, VM/container, brandvägg, SSH-serverns rättigheter och/eller hårdvarubegränsningar. Se [docs/SECURITY.md](docs/SECURITY.md).
+**Detta är inte en OS-sandbox.** `AGENT_ACCESS_POLICY.json` lagrar även regler som inte kan upprätthållas fullt ut av OpenCode 1.x. Exempel: exakt URL-/domänfilter, specifika USB-enheter, firmwareflashning och tillåtna Git-remotes/grenar. Fri shellåtkomst kan kringgå rådgivande regler. Välj Neka för otillåtna verktyg, använd en begränsad OS-användare/VM/brandvägg där stark isolering behövs och ge inte obevakat läge till ett team utan genomgång.
 
-`--auto` vid `Unattended` kan godkänna `ask` automatiskt. Sätt `deny` för det som **måste** förbli otillåtet. En Git-push-behörighet i ett verktygsfilter är aldrig en garanti att kommandot inte kan riktas mot en annan remote via en alternativ shellväg.
+För Git gäller: SSH-nyckeln pekas endast ut som en sökväg, den kopieras inte och git-konfigurationsknappen skriver inte automatiskt `core.sshCommand`. SSH-porten ingår i nya SSH-URL:er som programmet kan lägga till. Befintliga remotes ändras inte automatiskt.
 
-## Git och SSH
+## Om projektets status och testning
 
-För egen SSH-port, använd en fullständig remote-URL, exempelvis:
+- Innehåller 23 inbäddade agentprofiler samt gemensamma regler.
+- Innehåller C++/Qt-test för profiles, save/load, preservation, bortvalda agenter, kodgranskarens skrivskydd och symlänkvägran.
+- Innehåller GitHub Actions med fyra plattformsmatriser och releasepublicering när en tagg pushas.
+- **Inte verifierat med lokal Qt-kompilering eller riktig OpenCode-session i denna miljö.** CI-status måste kontrolleras innan du använder paket i skarpa projekt.
+- Egna anpassade agentprofiler och OpenCode 2.x-adapter är inte implementerade i denna beta.
 
-```text
-ssh://git@192.0.2.10:2222/team/myproject.git
-```
+## Dokumentation
 
-`git`-menyn sparar en *avsedd konfiguration*. Kör `agents-opencode git-apply` separat för att göra godkända lokala ändringar. `git-apply` ändrar inte SSH-nycklar, host key verifiering, serverinställningar, befintliga remoters URL:er eller Git-branch som standard. Det gör inga pushar. Kommandot `git push` behöver alltid godkännas inom projektets regler.
+- [Starta här – kort nybörjarguide](START_HAR.md)
+- [Tredjepartslicenser](THIRD_PARTY_NOTICES.md)
 
-## Befintliga projekt / migrering
+- [Ersätt tidigare repository och pusha säkert](docs/ERSATT_GITHUB.md)
+- [Säkerhetsgränser](docs/SAKERHET.md)
+- [Officiell Qt-dokumentation](https://doc.qt.io/qt-6/)
+- [OpenCode permissions](https://docs.opencode.ai/docs/permissions/)
 
-**Testa på en kopia först.** Om ett projekt har gammalt `.opencode/agentteam-manifest.json`, välj `agents-opencode migrate`. Importen läser de 23 agentnamnen och nuvarande modellval, men använder konservativa behörighetsstandarder i stället för att ärva alltför öppna gamla rättigheter. Du får en förhandsvisning innan ändring. Befintliga projektfiler som ändras backas upp.
-
-Den här omskrivningen av managerprogrammet ändrar **inte** användarens Git-repository eller gamla projekt automatiskt. Varje projekt uppdateras bara när du kör ett uttryckligt kommando i den projektmappen.
-
-## Testning och byggen
-
-```bash
-go test ./...
-go vet ./...
-go build ./cmd/agents-opencode
-```
-
-Bygg för andra operativsystem (korskompilering, inte samma sak som körtest):
-
-```bash
-GOOS=windows GOARCH=amd64 go build -o agents-opencode-windows-amd64.exe ./cmd/agents-opencode
-GOOS=darwin GOARCH=arm64 go build -o agents-opencode-macos-arm64 ./cmd/agents-opencode
-GOOS=linux GOARCH=arm64 go build -o agents-opencode-linux-arm64 ./cmd/agents-opencode
-```
-
-GitHub Actions testar Go-kod på Windows, Linux och macOS och skapar artefakter/releaser via `.github/workflows/` när repositoryt har pushats. **Säg inte att OpenCode-integration fungerar förrän den testats med verklig installation och modell.**
-
-## Nuvarande begränsningar i betaversionen
-
-1. Ingen Live/OpenCode-integrationstestning har utförts här (ingen installerad OpenCode i byggmiljön).
-2. Primär JSON-kodgenerering följer dokumenterat OpenCode **1.x**-schema. Okända framtida format och 2.x verifieras inte automatiskt och ska inte antas vara kompatibla.
-3. Interaktiva menyer är för närvarande huvudsakligen på engelska, trots att svensk dokumentation finns.
-4. Försöker inte implementera en OS-brandvägg, USB-policy enforcement eller fullständig shell-sandbox.
-5. Git `SSHIdentity` lagras bara som sökvägsmetadata; SSH-config/agent hanteras separat.
-6. Interaktiv guide är textbaserad och inte en fullskalig grafisk TUI. Ingen modellbenchmark, automatisk projektanalys eller modelldispatch ingår avsiktligt.
-7. Installeraren gör backup men har inte full transaktionell rollback över en hel uppsättning filer vid strömavbrott mitt i installation; tidigare filer kan återställas från backup.
-
-## Licens
-
-Bevara den licens som gäller för originalprojektet om en sådan finns; denna leverans tilldelar ingen ny licens åt tredjeparts- eller tidigare projektmaterial.
+**Qt-licens:** Qt tillhandahålls under olika licenser, bland annat LGPLv3 för tillämpliga moduler under gällande villkor. Om du distribuerar binärer måste du uppfylla Qt:s licenskrav och inkludera lämpliga notifieringar, licenstexter och eventuellt återlänkningsmöjligheter. Projektets egen licens måste fastställas av repositoryägaren.

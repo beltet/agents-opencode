@@ -1,0 +1,46 @@
+{
+  "version": "2.1.0",
+  "workflow_revision": 2,
+  "installed_agents": [
+    "code-reviewer",
+    "orchestrator",
+    "performance-engineer",
+    "software-engineer",
+    "system-architect",
+    "technical-documenter",
+    "technical-educator",
+    "ux-ui-designer",
+    "verification-engineer"
+  ],
+  "models": {
+    "code-reviewer": "openai/gpt-6.1-sol",
+    "orchestrator": "openai/gpt-6.1-sol",
+    "performance-engineer": "openai/gpt-6.1-sol",
+    "software-engineer": "openai/gpt-6.1-sol",
+    "system-architect": "openai/gpt-6.1-sol",
+    "technical-documenter": "openai/gpt-6-luna",
+    "technical-educator": "openai/gpt-6-luna",
+    "ux-ui-designer": "openai/gpt-6.1-terra",
+    "verification-engineer": "openai/gpt-6.1-sol"
+  },
+  "mode": "HYBRID",
+  "permissions": {
+    "shell": "allow",
+    "file_edit": "allow",
+    "gitpush": "allow",
+    "internet": "allow",
+    "outside_read": "allow",
+    "outside_write": "allow",
+    "sudo": "allow",
+    "destructive": "allow",
+    "secrets": "ask",
+    "mcp": "allow",
+    "packages": "allow",
+    "hardware": "allow",
+    "unattended": true,
+    "mounts": []
+  },
+  "access_policy": "AGENT_ACCESS_POLICY.json",
+  "approved_remote": null,
+  "models_source": "opencode models"
+}

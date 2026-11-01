@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Agents OpenCode
+Comment=Configure OpenCode agent teams with a GUI
+Exec=agents-opencode
+Icon=agents-opencode
+Terminal=false
+Categories=Development;Utility;
