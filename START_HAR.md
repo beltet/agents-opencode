@@ -1,173 +1,104 @@
-# Börja här — installera och använd agentteamet
+# Börja här – agents-opencode v3 (Go)
 
-> English version: [START_HERE.md](START_HERE.md)
+Denna guide är skriven för att du ska kunna följa den från början till slut. Programmet installeras en gång per dator; sedan konfigurerar du agentteam **separat i varje projektmapp**.
 
-Den här guiden är för dig som vill hämta verktyget från GitHub och börja använda det utan att kunna terminalkommandon sedan tidigare. Följ stegen i ordning. Verktyget installerar ett agentteam i OpenCode — det installerar **inte** OpenCode eller AI-modeller.
+## 1. Förbered datorn
 
-## Steg 1 — installera förberedelserna
+Installera **Go 1.23+**, **Git** och **OpenCode**. Go behövs bara för att bygga verktyget. Koppla OpenCode till dina valda modeller på vanligt sätt. Kontrollera:
 
-Du behöver Python, OpenCode och en modell som OpenCode kan använda. Git är användbart för projekt, men **krävs inte för att installera paketet**. Installera programmen separat från deras officiella sidor:
-
-- [Python — python.org/downloads](https://www.python.org/downloads/) — version 3.10 eller senare. På Windows, markera gärna alternativet att lägga till Python i PATH om installationsprogrammet erbjuder det.
-- [Git — git-scm.com/downloads](https://git-scm.com/downloads/) — behövs för versionshantering. Du kan tacka nej till att skapa ett Git-repository i ett projekt.
-- [OpenCode — officiell dokumentation](https://opencode.ai/docs/) — installera OpenCode 1.x och följ dokumentationen för din dator. Modeller och modellkonton ställs in i OpenCode separat. OpenCode kan ha egna plattformskrav på Windows, exempelvis Git Bash; installationsprogrammet i den här guiden kräver inte Bash.
-
-**Modellkonton och användning kan kosta pengar.** Kontrollera providerpriser och eventuella användningsgränser innan du börjar. Att en modell visas i listan är inte bevis för att inloggning, betalning eller anrop fungerar.
-
-### Öppna en terminal innan du skriver kommandon
-
-En **terminal** är ett fönster där du skriver korta textkommandon i stället för att klicka på knappar. Du kommer att öppna den i en viss mapp, så att kommandot körs på rätt plats.
-
-- **Windows:** öppna mappen i Utforskaren. Klicka i adressfältet högst upp, skriv `powershell` och tryck Enter. Ett PowerShell-fönster öppnas i den mappen.
-- **Linux:** öppna mappen i filhanteraren, högerklicka och välj exempelvis **Open in Terminal** / **Öppna i terminal**. Menynamnet beror på Linux-distribution och filhanterare. Alternativt öppnar du Terminal från programmenyn och använder `cd` för att gå till mappen.
-
-Skriv inledande kontrollkommandon i terminalen. Tryck Enter efter varje rad. På Windows:
-
-```powershell
-py -3 --version
+```bash
+go version
+git --version
 opencode --version
 opencode models
 ```
 
-På Linux används `python3` i stället för `py -3`:
+På Fedora kan du installera Go/Git med `sudo dnf install golang git`. På CachyOS/Arch är motsvarigheten `sudo pacman -S go git`.
+
+## 2. Klona och bygg managerprogrammet
 
 ```bash
-python3 --version
-opencode --version
-opencode models
+mkdir -p ~/git
+cd ~/git
+git clone https://github.com/beltet/agents-opencode.git
+cd agents-opencode
+go test ./...
+go build -o agents-opencode ./cmd/agents-opencode
+./agents-opencode version
 ```
 
-Versionskommandona ska visa installerade program. `opencode models` kan kontakta en provider och kräver nätverk. En visad modell bekräftar inte att autentisering eller användning fungerar. Om något kommando inte känns igen, installera eller konfigurera motsvarande program enligt dess officiella instruktioner innan du fortsätter.
+Windows: öppna PowerShell i repositorymappen och kör `go test ./...` samt `go build -o agents-opencode.exe ./cmd/agents-opencode`.
 
-## Steg 2 — hämta och packa upp paketet från GitHub
+## 3. Installera den kompilerade binären
 
-1. Öppna projektets GitHub-sida i webbläsaren.
-2. Klicka på den gröna knappen **Code**.
-3. Välj **Download ZIP**. Vänta tills ZIP-filen har hämtats till datorn (oftast mappen **Nedladdningar / Downloads**).
-4. Packa upp ZIP-filen — kör inte installationsprogrammet inuti ZIP-filen.
-   - **Windows:** högerklicka på ZIP-filen och välj **Extract All… / Extrahera alla…**, sedan **Extract / Extrahera**.
-   - **Linux:** öppna ZIP-filen i filhanteraren och välj **Extract / Extrahera** eller **Extract Here / Extrahera här**. Namn och placering kan skilja sig mellan distributioner.
-5. Öppna den nya, uppackade mappen. Den kan innehålla en yttre mapp med samma namn; öppna den inre paketmappen. Kontrollera att du ser filen **`install.cmd`** på Windows eller **`install.sh`** på Linux. Den här mappen är **verktygsmappen**, inte ditt eget projekt.
-
-## Steg 3 — installera verktyget
-
-Installationen görs en gång från paketmappen du just packade upp. Håll isär den mappen och projektmappen där du vill använda agenterna.
-
-### Windows
-
-1. Öppna paketmappen i Utforskaren.
-2. Klicka i adressfältet, skriv `powershell` och tryck Enter. Kontrollera att PowerShell öppnas i mappen där du ser `install.cmd`.
-3. Skriv och kör:
-
-   ```powershell
-   .\install.cmd --lang sv
-   ```
-
-   Installationen placerar launchern under din användarprofil och lägger normalt dess katalog till användarens PATH. Du behöver inte administratörsrättigheter. Om terminalen ber om språk kan du välja svenska. Öppna ett nytt terminalfönster efter installationen.
-
-### Linux
-
-1. Öppna paketmappen i filhanteraren.
-2. Välj **Open in Terminal / Öppna i terminal** om alternativet finns. Annars öppnar du Terminal och går till paketmappen med `cd`.
-3. Kontrollera att du är i mappen där `install.sh` syns, och kör:
-
-   ```bash
-   bash install.sh --lang sv
-   ```
-
-   Installationen placerar normalt launchern i `~/.local/bin`. Den **ändrar inte din PATH**. Därför använder den här guiden launcherns fullständiga sökväg, så du behöver inte ändra terminalinställningar. Kör inte `sudo`.
-
-## Steg 4 — öppna ditt projekt och starta konfigurationen
-
-Verktyget konfigurerar ett projekt som du redan har. Om du har ett projekt, använd dess befintliga mapp. Om du bara vill prova kan du skapa en tom testmapp i din hemmapp:
-
-- **Windows PowerShell:** `New-Item -ItemType Directory -Force "$HOME\my-first-project" | Out-Null`
-- **Linux Terminal:** `mkdir -p "$HOME/my-first-project"`
-
-Öppna sedan **projektmappen** i Utforskaren/filhanteraren, öppna en terminal där enligt instruktionerna i steg 1, och kör kommandot för ditt system:
-
-**Windows PowerShell:**
-
-```powershell
-agents-opencode install --lang sv
-```
-
-Om Windows inte hittar kommandot, använd launchern direkt:
-
-```powershell
-& "$env:LOCALAPPDATA\agents-opencode\bin\agents-opencode.cmd" install --lang sv
-```
-
-**Linux Terminal** — använd den fullständiga sökvägen; ingen PATH-ändring behövs:
+Linux/macOS:
 
 ```bash
-"$HOME/.local/bin/agents-opencode" install --lang sv
+mkdir -p ~/.local/bin
+cp ./agents-opencode ~/.local/bin/agents-opencode
 ```
 
-Om guiden erbjuder att göra mappen till ett Git-projekt kan du tacka ja till `git init` eller tacka nej. För att tacka ja måste Git vara installerat. I ett projekt med filer, tacka bara ja om du vill att Git ska börja hantera projektet.
+Du kan använda `~/.local/bin/agents-opencode` direkt även om mappen inte är på PATH.
 
-## Steg 5 — gör val i guiden
-
-Ta god tid på dig och läs frågorna. Om du vill avbryta utan att spara agentkonfigurationen, svara nej på frågan om att spara. En eventuell mapp eller Git-historik som du redan valt att skapa tas inte bort när du avbryter.
-
-1. **Agenter:** välj `c` för det föreslagna kärnteamet. Det räcker för en första genomgång; du behöver inte välja alla specialister.
-2. **Modeller:** välj ett nummer från listan som hämtas med `opencode models`. Att modellen syns betyder inte att kontot är inloggat eller att anropet fungerar. Kontrollera provider och pris separat. Inga modell-ID:n eller API-nycklar följer med paketet.
-3. **Informationsklassning:** välj efter vilken projektinformation den valda modellen får se. `PRIVATE` ska bara väljas för verifierat lokalt hostade modeller. Molnmodeller kan få se projektets instruktioner och innehåll. `HYBRID` blandar lokal och molnanvändning; det skyddar inte automatiskt känslig information.
-4. **Behörighetsprofil:** välj **1 — Låst arbetsdator** för ett försiktigt första försök; standardvalet är annars **2**. Läs varje följdfråga: `ask` betyder fråga först, `deny` neka och `allow` tillåta utan fråga. Låt obevakat läge vara avstängt. Bekräfta behörighetsprofilen med ja när den stämmer, annars avbryts guiden.
-5. Läs sammanfattningen. När guiden frågar om den ska spara projektkonfiguration och profiler, svara **ja** bara om valen stämmer. Standardvalet på frågan om att spara är **nej**; tryck Enter för nej.
-
-`SHAREABLE` är klassningen för information som får delas med godkända molnmodeller. Prova bara med material utan hemligheter eller personuppgifter om du är osäker. `PRIVATE` kräver att du har verifierat att modellanslutningarna verkligen är lokala, inte bara att modellen har ett visst namn.
-
-## Steg 6 — starta och ge en första uppgift
-
-Kör startkommandot **från projektmappen**.
-
-**Windows PowerShell:**
+Windows PowerShell:
 
 ```powershell
-agents-opencode run
+New-Item -ItemType Directory -Force "$env:LOCALAPPDATA\agents-opencode" | Out-Null
+Copy-Item .\agents-opencode.exe "$env:LOCALAPPDATA\agents-opencode\agents-opencode.exe"
 ```
 
-Om kommandot inte hittas, använd:
+## 4. Välj ett TESTprojekt innan ditt riktiga
 
-```powershell
-& "$env:LOCALAPPDATA\agents-opencode\bin\agents-opencode.cmd" run
-```
-
-**Linux Terminal:**
+Linux:
 
 ```bash
-"$HOME/.local/bin/agents-opencode" run
+mkdir -p ~/projekt/test-agentteam
+cd ~/projekt/test-agentteam
+~/.local/bin/agents-opencode install
 ```
 
-När OpenCode öppnas skriver du uppgiften där. Börja gärna med denna försiktiga fråga:
+Windows: skapa en tom mapp och kör `& "$env:LOCALAPPDATA\agents-opencode\agents-opencode.exe" install` där.
 
-> Läs projektets instruktioner. Beskriv kort vad projektet gör och vilka viktiga filer och tester du hittar. Ändra inga filer, installera inga paket och använd inte nätverket. Föreslå ett litet nästa steg och invänta mitt godkännande.
+Installationsguiden frågar i tur och ordning:
 
-Om du valde kärnteamet är orkestreraren redan huvudagent; inget extra aktiveringskommando behövs. Lägg senare till programmerare och testare med `agents-opencode agents` på Windows eller `"$HOME/.local/bin/agents-opencode" agents` på Linux om du vill att teamet också ska skriva kod. Starta om OpenCode efter ändringar i konfigurationen. Agenternas instruktioner är på engelska, men du kan be om svar på svenska.
+1. Agentnummer (se katalogen). Välj uttryckligen själv, exempelvis `3,11,17,23`. Tomt val är inte tillräckligt vid första installationen.
+2. Om du vill visa tillgängliga modell-ID:n med `opencode models`.
+3. Modell-ID för alla på en gång, eller separat per agent.
+4. Om du vill ändra behörigheter och Git-inställningar.
+5. Bekräftelse innan projektfilerna skapas.
+6. En kort projektbeskrivning. Den kan utökas i `PROJECT_BRIEF.md` senare.
 
-Kommandona `resume` och `status` körs också från projektmappen:
+Ingen modell eller extra specialist väljs automatiskt på grund av projektinnehåll. Modeller måste anges av dig.
 
-**Windows PowerShell:**
-
-```powershell
-agents-opencode resume
-agents-opencode status
-```
-
-**Linux Terminal:**
+## 5. Kontrollera resultatet
 
 ```bash
-"$HOME/.local/bin/agents-opencode" resume
-"$HOME/.local/bin/agents-opencode" status
+~/.local/bin/agents-opencode status
+~/.local/bin/agents-opencode doctor
 ```
 
-## Fördjupning och felsökning
+Granska `opencode.json`, `.opencode/agents/`, `.agents-opencode/TEAM_REGISTRY.md` och `AGENT_ACCESS_POLICY.json` innan du använder ett riktigt repository. Kör sedan:
 
-- **Modellkontot/priset:** modelllistan är ingen inloggnings- eller betalningskontroll. Om anrop misslyckas, kontrollera OpenCode-providerinställningar, konto och leverantörens priser.
-- **Windows hittar inte `agents-opencode`:** öppna ett nytt terminalfönster. Om det fortfarande inte fungerar, använd den fullständiga launchersökvägen ovan. OpenCode på Windows kan ha separata krav såsom Git Bash.
-- **Linux hittar inte kommandot:** den här guiden använder avsiktligt `"$HOME/.local/bin/agents-opencode"`. Installationsprogrammet lägger inte till `~/.local/bin` i PATH.
-- **Git:** Git är separat. Projektguiden erbjuder att initiera Git om det saknas; du får tacka nej.
-- **JSONC:** installationsverktyget hanterar `opencode.json`, inte kommenterad `opencode.jsonc`. Läs och slå ihop befintlig konfiguration varsamt.
-- **Windows-verifiering:** native Windows-installation och end-to-end-användning har inte verifierats här. Linux-kontroller har körts; vissa Windows-tester hoppas över på Linux.
-- **Säkerhet:** behörighetsregler i OpenCode är inte en OS-sandbox eller brandvägg. För mer om `ask`, `deny`, `allow`, molndata och obevakat läge, se säkerhetsavsnitten i [README.md](README.md).
+```bash
+~/.local/bin/agents-opencode run
+```
+
+Orkestreraren ska läsa projektbeskrivning och teamregister, notera tillgängliga specialister och delegera programmering, verifiering och granskning till rätt agent när sådan finns.
+
+## 6. Konfigurera Git
+
+Kör `agents-opencode git` för att beskriva Git-läge och ev. remote. **Det gör inte `git push`.** Kör därefter `agents-opencode git-apply` om du vill tillämpa lokal `git config` eller lägga till en ny remote. Vid egen SSH-port används en `ssh://`-URL, t.ex. `ssh://git@server:2222/owner/repo.git`.
+
+## 7. Uppdatera senare
+
+Efter att ha uppdaterat den kompilerade managerbinären måste du uttryckligen öppna respektive projektmapp och köra `agents-opencode refresh`. Programmet visar berörda filer och tar backup före ändringar. Vill du ta manuell backup: `agents-opencode backup`.
+
+## 8. Problem?
+
+`opencode models` fungerar inte: verifiera OpenCode-installation och inloggning; ange modell-ID manuellt om det är känt.
+
+`go` hittas inte: installera en modern Go-version, öppna ny terminal.
+
+`git-apply` säger att remote redan finns med annan adress: det är avsiktligt för att undvika oönskad förändring. Kontrollera `git remote -v` och ändra för hand om du vill.
+
+Behörighetsvarningar: domänlistor, USB och firmware är **inte garanterat blockerade av managerprogrammet**. Läs [docs/SECURITY.md](docs/SECURITY.md).
