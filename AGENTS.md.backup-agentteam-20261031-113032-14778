@@ -1,0 +1,30 @@
+# Repository-local workflow (outside the installer-managed section)
+
+## First check for every task or resumed session
+
+Before other project work, check the Git boundary:
+
+```sh
+git status --short --untracked-files=normal
+git ls-files
+git ls-files -ci --exclude-standard
+git diff --cached --name-status
+```
+
+Installed agents and generated configuration are local only: `.opencode/`,
+`AGENTS.md`, `PROJECT_POLICY.md`, `AGENT_ACCESS_POLICY.json`, `opencode.json`
+and `opencode.jsonc`. Store working notes, logs, decisions, handoffs and
+checkpoints in `.local-work/` (ignored), not alongside distribution sources.
+Installer backups are also ignored.
+
+If local artifacts are tracked/staged, or unexpected new files appear, report
+and resolve the boundary before proceeding; do not delete user files or
+silently remove tracked files. Verify ignore coverage with `git check-ignore`.
+Only curated installer code, source profiles (`lib/profiles/`), tests and
+deliberately maintained product documentation belong in Git. Never force-add
+local artifacts. Before any authorized commit, review the staged paths and
+diff and stage explicit curated paths only; do not use `git add .` or `-A`.
+Commits and pushes still require explicit user authorization.
+
+Keep these local instructions outside the managed section so reinstalling
+the agents preserves them. See README.md for the repository's Git boundary.

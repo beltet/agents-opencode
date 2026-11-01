@@ -1,22 +1,12 @@
-# Build artifacts
-/agents-opencode
-/agents-opencode.exe
-/dist/
-*.test
-*.out
-
-# Project-local generated installation (do not commit accidentally)
-/.opencode/
-/.agents-opencode/
-/AGENTS.md
-/AGENT_ACCESS_POLICY.json
-/PROJECT_BRIEF.md
-/opencode.json
-/.local-work/
-
-# Secrets
-.env
-.env.*
-*.key
-*.pem
+build/
+cmake-build-*/
+.vs/
+.idea/
+*.user
+*.autosave
 .DS_Store
+AppDir/
+*.AppImage
+*.dmg
+*.zip
+*.tar.gz

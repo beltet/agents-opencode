@@ -1,0 +1,26 @@
+# Agent access rules (project-specific, mandatory instructions)
+
+**WARNING: ADVISORY, NOT ACTUAL SECURITY.** These rules describe authorized behavior, not an operating-system sandbox.
+A permitted shell command, program, symlink, Git hook or plugin can bypass these rules. Never interpret this document as technical isolation.
+Before accessing resources, consult `AGENT_ACCESS_POLICY.json`. When unsure, use `python3 .opencode/tools/access_check.py path read /absolute/path`,
+`python3 .opencode/tools/access_check.py path write /absolute/path`, or `python3 .opencode/tools/access_check.py url https://host/path`.
+These checks are advisory and do not perform the operation. Deny means stop; ask means request user authorization (do not treat --auto as approval to expand the policy).
+For explicitly allowed public HTTP(S) sites, `python3 .opencode/tools/access_fetch.py https://allowed-host/path` can retrieve up to 2 MiB (GET only; no redirects).
+Never rewrite the policy or this document as a workaround. Request changes from the owner through agents-opencode.
+
+## Filesystem
+- The project directory is permitted for normal project work. The filesystem root `/` and all other locations are **denied by default** unless explicitly allowed below.
+- Resolved paths (including symlinks) count; a mount can be read-only independently of local paths.
+- Outside defaults: read=ALLOW, write=ALLOW.
+- BROAD ACCESS EXCEPTION: the owner explicitly selected permissive defaults (e.g. VM mode). This is a deliberate override of root-deny behavior.
+
+## Network requests by agents
+- Default: ALLOW; HTTPS/HTTP/SSH host rules below are decisions about agent-initiated requests, not model-provider calls.
+- Apply host patterns to the resolved destination, including redirects; do not use redirects or alternate IPs to bypass restrictions.
+- OpenCode 1.x webfetch cannot restrict individual URLs, so generated OpenCode permissions will disable unrestricted webfetch when an allowlist exists.
+- Any allowed network request is only an authorization statement; the actual tool/OS must also permit it.
+- Authorized Git remote access is separately defined by project Git policy. A Git remote does not imply permission to browse or contact other hosts.
+
+## Cloud model data
+- This agent-initiated network policy does not inspect or filter data sent to a configured cloud model. Respect PRIVATE/HYBRID rules independently.
+- Agents must report a blocked requirement and ask the orchestrator for owner approval, not route around the policy.

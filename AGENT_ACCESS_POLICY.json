@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "advisory_only": true,
+  "project_root": "/home/bjohel/git/agents-opencode",
+  "filesystem": {
+    "default_outside": {
+      "read": "allow",
+      "write": "allow"
+    },
+    "paths": []
+  },
+  "network": {
+    "default": "allow",
+    "hosts": []
+  },
+  "model_api_note": "Configured AI model provider traffic is controlled separately; this list is for agent-initiated network requests.",
+  "warning": "NOT A SANDBOX: OpenCode tool rules and agent instructions cannot prevent arbitrary shell subprocesses, symlink or network escapes."
+}
