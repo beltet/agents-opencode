@@ -10,3 +10,16 @@ AppDir/
 *.dmg
 *.zip
 *.tar.gz
+
+# Installed teams, generated configuration and local working data are not sources.
+/.local-work/
+/.opencode/
+/AGENTS.md
+/PROJECT_POLICY.md
+/AGENT_ACCESS_POLICY.json
+/opencode.json
+/opencode.jsonc
+/agenttest/
+**/__pycache__/
+*.py[cod]
+*.backup-agentteam-*

@@ -3,6 +3,7 @@
 #include <QTemporaryDir>
 #include <QDir>
 #include <QFile>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 
@@ -58,6 +59,83 @@ private slots:
         QVERIFY(f.open(QIODevice::ReadOnly));root=QJsonDocument::fromJson(f.readAll()).object();
         QCOMPARE(root.value("custom_flag").toInt(),42);
         QVERIFY(!root.value("agent").toObject().contains("code-reviewer"));
+    }
+    void mixedProvidersDoNotInstallFilters(){
+        QTemporaryDir tmp; QVERIFY(tmp.isValid());
+        auto c=Project::defaultConfig();
+        c.agents={"orchestrator","software-engineer","verification-engineer"};
+        // Synthetic IDs: provider/model choices are not a provider allowlist.
+        c.models={{"orchestrator","custom-cloud/main"},
+                  {"software-engineer","my-local-endpoint/coder"},
+                  {"verification-engineer","another-provider/review"}};
+        QString err;
+        for(int pass=0;pass<2;++pass){
+            QVERIFY2(Project::save(tmp.path(),c,err),qPrintable(err));
+            QFile f(tmp.filePath("opencode.json"));
+            QVERIFY(f.open(QIODevice::ReadOnly));
+            const auto doc=QJsonDocument::fromJson(f.readAll());
+            QVERIFY(doc.isObject());
+            const auto root=doc.object();
+            QVERIFY(!root.contains("enabled_providers"));
+            QVERIFY(!root.contains("disabled_providers"));
+            // No provider block means no per-provider model whitelist/blacklist.
+            QVERIFY(!root.contains("provider"));
+            const auto agents=root.value("agent").toObject();
+            for(const auto& role:c.agents)
+                QCOMPARE(agents.value(role).toObject().value("model"),c.models.value(role));
+            ProjectConfig loaded;
+            QVERIFY2(Project::load(tmp.path(),loaded,err),qPrintable(err));
+            c=loaded;
+        }
+    }
+    void preserveProviderSettings_data(){
+        QTest::addColumn<bool>("explicitFilters");
+        QTest::newRow("unrelated-provider-settings")<<false;
+        QTest::newRow("explicit-user-filters")<<true;
+    }
+    void preserveProviderSettings(){
+        QFETCH(bool,explicitFilters);
+        QTemporaryDir tmp; QVERIFY(tmp.isValid());
+        QJsonObject providerSettings{
+            {"custom-cloud",QJsonObject{
+                {"name","User endpoint"},
+                {"options",QJsonObject{{"baseURL","https://example.invalid/v1"},{"timeout",12345}}},
+                {"models",QJsonObject{{"main",QJsonObject{{"name","User model"}}}}}}},
+            {"unused-provider",QJsonObject{{"name","Keep even when not selected"}}}};
+        if(explicitFilters){
+            auto provider=providerSettings.value("custom-cloud").toObject();
+            provider.insert("whitelist",QJsonArray{"main","other-model"});
+            provider.insert("blacklist",QJsonArray{"blocked-model"});
+            providerSettings.insert("custom-cloud",provider);
+        }
+        QJsonObject original{{"provider",providerSettings},{"custom_flag",42}};
+        if(explicitFilters){
+            original.insert("enabled_providers",QJsonArray{"custom-cloud","unused-provider"});
+            original.insert("disabled_providers",QJsonArray{"deliberately-disabled"});
+        }
+        QFile f(tmp.filePath("opencode.json"));
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        const auto bytes=QJsonDocument(original).toJson();
+        QCOMPARE(f.write(bytes),qint64(bytes.size()));
+        f.close();
+        auto c=Project::defaultConfig();
+        c.agents={"orchestrator","software-engineer"};
+        c.models={{"orchestrator","custom-cloud/main"},{"software-engineer","my-local-endpoint/coder"}};
+        QString err;
+        for(int pass=0;pass<2;++pass){
+            QVERIFY2(Project::save(tmp.path(),c,err),qPrintable(err));
+            QVERIFY(f.open(QIODevice::ReadOnly));
+            const auto doc=QJsonDocument::fromJson(f.readAll());
+            f.close();
+            QVERIFY(doc.isObject());
+            const auto root=doc.object();
+            QCOMPARE(root.value("provider"),original.value("provider"));
+            QCOMPARE(root.value("custom_flag"),original.value("custom_flag"));
+            for(const auto& key:{"enabled_providers","disabled_providers"}){
+                QCOMPARE(root.contains(key),original.contains(key));
+                QCOMPARE(root.value(key),original.value(key));
+            }
+        }
     }
     void rejectIncompleteConfig(){
         QTemporaryDir tmp;auto c=Project::defaultConfig();

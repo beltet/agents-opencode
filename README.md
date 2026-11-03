@@ -92,6 +92,8 @@ GitHub Actions använder `macdeployqt` för att skapa delbara `.dmg`-paket.
 7. Vill du tillämpa lokala Git-inställningar, använd knappen på Git-fliken. Inget pushas.
 8. Öppna en terminal **i projektmappen** och starta `opencode` som vanligt. Orkestreraren läser `PROJECT_BRIEF.md` och teamregistret.
 
+**Inga automatiska leverantörs- eller modellfilter:** Installationsprogrammet har ingen fast leverantörslista och lägger inte till `enabled_providers`, `disabled_providers` eller `provider.<id>.whitelist`/`blacklist`, inte heller när du sparar igen. Modellval per agent skapar inga sådana begränsningar. Befintliga leverantörsinställningar och uttryckliga användarfilter bevaras; programmet tar alltså inte bort begränsningar som du själv har lagt in.
+
 ### Skapade filer
 
 ```text
